@@ -1,6 +1,6 @@
 import random
 
-from cambc import *
+from cambc import Controller, Direction, EntityType, Environment, Position, Team
 
 DIRECTIONS = [d for d in Direction if d != Direction.CENTRE]
 
@@ -72,6 +72,7 @@ class Player:
             for tile in vision_tiles:
                 # Read Marker (marker_id can be adapted to reading of other building types in vision radius)
                 building_id = ct.get_tile_building_id(tile)
+                building_team_for_conveyor = ct.get_team(building_id)
 
                 if ct.get_entity_type(building_id) == EntityType.MARKER:
                     marker_value = ct.get_marker_value(building_id)
@@ -81,9 +82,8 @@ class Player:
                 # CHECK IF CONVEYOR FRIENDLY OR ENEMY
                 
                 # Searches for closest conveyor in vision to itself every turn (NEED to ensure only friendly conveyors)
-                building_team_for_conveyor = ct.get_team(building_id)
 
-                elif (ct.get_entity_type(building_id) == EntityType.CONVEYOR or ct.get_entity_type(building_id) == EntityType.ARMOURED_CONVEYOR) and tile != ct.get_position() and not self.connect_harvester and building_team == Team.A:
+                elif (ct.get_entity_type(building_id) == EntityType.CONVEYOR or ct.get_entity_type(building_id) == EntityType.ARMOURED_CONVEYOR) and tile != ct.get_position() and not self.connect_harvester and building_team_for_conveyor == Team.A:
                     if ct.get_position().distance_squared(tile) <= ct.get_position().distance_squared(self.closest_conveyor):
                         self.closest_conveyor = tile
                             
