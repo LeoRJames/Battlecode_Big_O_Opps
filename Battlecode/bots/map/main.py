@@ -24,22 +24,22 @@ class Player:
             
             # Initialise map 2d array to map dimensions (ixj)
             if self.map == []:
-                row = []
                 for j in range(ct.get_map_width()):
-                    row.append([0, 0, 0])
-                for i in range(ct.get_map_height()):
+                    row = []
+                    for i in range(ct.get_map_height()):
+                        row.append([0, 0, 0])
                     self.map.append(row)
 
             for tile in ct.get_nearby_tiles():
-                self.map[tile][0] = ct.get_tile_env(tile)    # Sets environment type of tile (EMPTY, WALL, ORE_TITANIUM, ORE_AXIONITE)
-                self.map[tile][1] = ct.get_entity_type(ct.get_tile_building_id(tile))    # Sets Entity_Type on tile (BUILDER_BOT, CORE, GUNNER, SENTINEL, BREACH, LAUNCHER, CONVEYOR, SPLITTER, ARMOURED_CONVEYOR, BRIDGE, HARVESTER, FOUNDRY, ROAD, BARRIER, MARKER)
-                self.map[tile][2] = ct.get_team(ct.get_tile_building_id(tile))  # Sets the team of the building
+                self.map[tile.y][tile.x][0] = ct.get_tile_env(tile)    # Sets environment type of tile (EMPTY, WALL, ORE_TITANIUM, ORE_AXIONITE)
+                self.map[tile.y][tile.x][1] = ct.get_entity_type(ct.get_tile_building_id(tile))    # Sets Entity_Type on tile (BUILDER_BOT, CORE, GUNNER, SENTINEL, BREACH, LAUNCHER, CONVEYOR, SPLITTER, ARMOURED_CONVEYOR, BRIDGE, HARVESTER, FOUNDRY, ROAD, BARRIER, MARKER)
+                self.map[tile.y][tile.x][2] = ct.get_team(ct.get_tile_building_id(tile))  # Sets the team of the building
 
-            for d in Direction:
-                check_pos = ct.get_position().add(d)
-                if ct.can_build_conveyor(check_pos, d):
-                    ct.build_conveyor(check_pos, d)
-                    break
+            #for d in Direction:
+            #    check_pos = ct.get_position().add(d)
+            #    if ct.can_build_conveyor(check_pos, d):
+            #        ct.build_conveyor(check_pos, d)
+            #        break
             
             # move in a random direction
             move_dir = random.choice(DIRECTIONS)
@@ -50,12 +50,15 @@ class Player:
             if ct.can_move(move_dir):
                 ct.move(move_dir)
 
-            for tile in self.map:
-                if self.map[tile][0] == Environment.EMPTY:
-                    ct.draw_indicator_dot(tile, 0, 255, 0)
-                elif self.map[tile][0] == Environment.WALL:
-                    ct.draw_indicator_dot(tile, 255, 0, 0)
-                elif self.map[tile][0] == Environment.ORE_TITANIUM:
-                    ct.draw_indicator_dot(tile, 0, 0, 255)
-                elif self.map[tile][0] == Environment.ORE_AXIONITE:
-                    ct.draw_indicator_dot(tile, 255, 255, 0)
+            for y in range(len(self.map)):
+                for x in range(len(self.map[y])):
+                    if self.map[y][x][1] == EntityType.CORE:
+                        ct.draw_indicator_dot(Position(x,y), 100, 100, 100)
+                    elif self.map[y][x][0] == Environment.EMPTY:
+                        ct.draw_indicator_dot(Position(x,y), 0, 255, 0)
+                    elif self.map[y][x][0] == Environment.WALL:
+                        ct.draw_indicator_dot(Position(x,y), 255, 0, 0)
+                    elif self.map[y][x][0] == Environment.ORE_TITANIUM:
+                        ct.draw_indicator_dot(Position(x,y), 0, 0, 255)
+                    elif self.map[y][x][0] == Environment.ORE_AXIONITE:
+                        ct.draw_indicator_dot(Position(x,y), 255, 255, 0)
