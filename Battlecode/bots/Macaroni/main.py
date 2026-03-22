@@ -1,8 +1,9 @@
 import random
-
 from cambc import Controller, Direction, EntityType, Environment, Position
 
 DIRECTIONS = [d for d in Direction if d != Direction.CENTRE]
+DIAGONALS  = [Direction.NORTHEAST, Direction.NORTHWEST, Direction.SOUTHEAST, Direction.SOUTHWEST]
+NON_DIAGONALS = [Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST]
 
 
 class Player:
@@ -10,183 +11,383 @@ class Player:
         self.num_spawned = 0  # number of builder bots spawned so far (core)
         self.dir = Direction.CENTRE  # Arbitrary
         self.core_pos = Position(1000, 1000)  # Arbitrary farr outside map range
+        self.enemy_core_position = Position(1000, 1000)
         self.closest_conveyor = Position(1000, 1000)
         self.connect_harvester = False
+        self.target = Position(0, 0)
+        self.status = 0
+        self.last_position = Position(0, 0)
 
-    def find_ores(self, ct):  # COULD ACCOUNT FOR WALLS
-        # List to store position of un-mined ores in vision
-        tit = []
-        ax = []
-        # Get all tiles in vision radius
+
+    def initialise(self, ct):
+
         vision_tiles = ct.get_nearby_tiles()
-        # Loops through all tiles and checks if they are an ore
-        for tile in vision_tiles:
-            if ct.get_tile_env(tile) == Environment.ORE_TITANIUM and ct.is_tile_empty(tile):
-                tit.append(tile)
-            elif ct.get_tile_env(tile) == Environment.ORE_AXIONITE and ct.is_tile_empty(tile):
-                ax.append(tile)
-        return tit, ax
+        for i in vision_tiles:
+            if ct.get_entity_type(ct.get_tile_building_id(i)) == EntityType.MARKER and ct.get_team(ct.get_tile_building_id(i)) == ct.get_team():
+                marker_value = ct.get_marker_value(ct.get_tile_building_id(i))
+                marker_value_id = (marker_value % (2 ** 28)) // (2 ** 20)
+                marker_status = marker_value // (2 ** 28)
 
-    def move_pos(self, ct, pos,
-                 conv=False):  # Return best tile to spawn/move to to get closer to passed pos DOES NOT PROPERLY ACCOUNT FOR WALLS YET
+                if marker_value_id == ct.get_id(): # if marker is referring to this bot
+                    if ct.can_move(ct.get_position().direction_to(i)):
+                        ct.move(ct.get_position().direction_to(i))
+                    if ct.can_destroy(i):   # Destroy marker
+                        ct.destroy(i)
+                    if marker_status == 1:
+                        # Load Position to check for opponent core
+                        target_x = (marker_value % (2 ** 12)) // (2 ** 6) -1
+                        target_y = marker_value % (2 ** 6)
+                        self.target = Position(target_x, target_y)
+                        self.status = 1
+                        ct.draw_indicator_dot(self.target,200,0,0)
+                    return
 
-        vision_tiles = ct.get_nearby_tiles(2)  # Get position of tiles in action radius
-        vision_tiles.remove(ct.get_position())  # Removes current position tile from list so will always move
-        retpos = Position(1000, 1000)  # Initialised far away so should not be returned
+            # Save position of the core
+            if ct.get_entity_type(ct.get_tile_building_id(ct.get_position())) == EntityType.CORE and ct.get_team(ct.get_tile_building_id(ct.get_position())) == ct.get_team():
+                self.core_pos = ct.get_position(ct.get_tile_building_id(ct.get_position()))
+                ct.draw_indicator_dot(self.core_pos, 0, 255, 0)
+            else:
+                ct.draw_indicator_dot(ct.get_position(), 0, 0, 0)
 
-        for tile in vision_tiles:
-            # Only consider tiles that are passable and empty environment type (does not move over ore) or tile does not contain building and if a conveyor must be built then do not consider diagonal tiles
-            if (ct.is_tile_passable(tile) and ct.get_tile_env(tile) == Environment.EMPTY or ct.is_tile_empty(
-                    tile)) and (not (conv and (
-                    ct.get_position().direction_to(tile) == Direction.NORTHEAST or ct.get_position().direction_to(
-                    tile) == Direction.NORTHWEST or ct.get_position().direction_to(
-                    tile) == Direction.SOUTHEAST or ct.get_position().direction_to(tile) == Direction.SOUTHWEST))):
-                if pos.distance_squared(tile) < pos.distance_squared(
-                        retpos):  # If closer passable tile, set as tile to move to
-                    retpos = tile
-        return retpos
+
+    def find_enemy_core(self, ct):
+        pos = ct.get_position()
+
+        self.move(ct)
+        ct.move(self.dir)
+
+        if ct.get_current_round() > 100: # Dont get stuck
+            self.status = 3
+            return
+
+        if ct.is_in_vision(self.target):
+            building_id = ct.get_tile_building_id(self.target)
+            if building_id and ct.get_entity_type(building_id) == EntityType.CORE: # ENEMY CORE HAS BEEN FOUND!
+                self.target = self.core_pos
+                enemy_core_x, enemy_core_y = ct.get_position(building_id).x, ct.get_position(building_id).y
+                self.enemy_core_position = ct.get_position(building_id)
+                marker_status = 2
+                bot_id = 0
+                message = (
+                        marker_status * (2 ** 28)
+                        + bot_id * (2 ** 20)
+                        + enemy_core_x * (2 ** 6)
+                        + enemy_core_y)
+                for i in DIRECTIONS:
+                    if ct.can_place_marker(pos.add(i)):
+                        ct.place_marker(pos.add(i),message)
+                        self.status = 2
+                        return
+
+            # Core was not here
+            self.status = 3
+            ct.draw_indicator_dot(pos, 0, 200, 200)
+
+
+    def spread_the_news_about_said_enemy_core(self, ct):
+
+        pos = ct.get_position()
+
+        self.target = self.core_pos
+        self.move(ct)
+        ct.move(self.dir)
+
+        enemy_core_x, enemy_core_y = self.enemy_core_position.x, self.enemy_core_position.y
+        marker_status = 2
+        bot_id = 0
+        message = (
+                marker_status * (2 ** 28)
+                + bot_id * (2 ** 20)
+                + enemy_core_x * (2 ** 6)
+                + enemy_core_y)
+
+        if random.randint(1,5) == 5 or ct.is_in_vision(self.core_pos):
+            for i in DIRECTIONS:
+                if ct.can_place_marker(pos.add(i)):
+                    ct.place_marker(pos.add(i), message)
+
+                    if ct.is_in_vision(self.core_pos):
+                        self.status = 3
+                        ct.draw_indicator_dot(pos, 0, 200, 200)
+                    return
+
+
+    def find_ores(self, ct):
+        vision_tiles = ct.get_nearby_tiles()
+        adj_tiles = ct.get_nearby_tiles(4)
+        # Search for an unmined ore to Ore if it can.
+
+        for i in adj_tiles:
+            if ct.get_tile_env(i) in [Environment.ORE_TITANIUM, Environment.ORE_AXIONITE]:
+                if ct.can_build_harvester(i):
+                    ct.build_harvester(i)
+                    self.status = 4
+                    return
+
+        for i in vision_tiles:
+            if ct.get_tile_env(i) in [Environment.ORE_TITANIUM, Environment.ORE_AXIONITE] and not(ct.get_tile_building_id(i)):
+                self.target = i
+                self.move(ct)
+                ct.move(self.dir)
+                return
+
+        # Well and truly lost, so just keeping moving forward, if it can.
+        if self.dir == Direction.CENTRE:
+            self.dir = random.choice(DIRECTIONS)
+        pos = ct.get_position()
+        if ct.can_move(self.dir):
+            ct.move(self.dir)
+        elif ct.can_build_road(pos.add(self.dir)):
+            ct.build_road(pos.add(self.dir))
+            ct.move(self.dir)
+        else:
+            self.dir = random.choice(DIRECTIONS)
+
+
+    def build_conveyor_home(self, ct):
+        adj_tiles = ct.get_nearby_tiles(4)
+        pos = ct.get_position()
+        self.target = self.core_pos
+
+        self.dir = pos.direction_to(self.target)
+        if self.dir in DIAGONALS:
+            self.dir = self.dir.rotate_right()
+
+        for i in adj_tiles:
+            if ct.get_entity_type(ct.get_tile_building_id(i)) == EntityType.HARVESTER:
+                for j in NON_DIAGONALS:
+                    if not(ct.get_entity_type(ct.get_tile_building_id(i.add(j))) == EntityType.CONVEYOR) and not(ct.get_entity_type(ct.get_tile_building_id(i.add(j))) == EntityType.HARVESTER) and ct.can_destroy(i.add(j)):
+                        ct.destroy(i.add(j))
+                    if ct.can_build_conveyor(i.add(j), self.dir):
+                        ct.build_conveyor(i.add(j), self.dir)
+                        return
+
+        if ct.get_team(ct.get_tile_building_id(pos)) != ct.get_team():
+            dir_A = pos.direction_to(self.target)
+            if dir_A in DIAGONALS:
+                dir_A = dir_A.rotate_right()
+
+            if ct.can_destroy(pos):
+                ct.destroy(pos)
+            else:
+                ct.move(pos.direction_to(self.last_position))
+                self.last_position = pos
+                pos = ct.get_position()
+            if ct.can_destroy(pos):
+                    ct.destroy(pos)
+            if ct.can_build_bridge(pos,pos.add(dir_A).add(dir_A)):
+                ct.build_bridge(pos,pos.add(dir_A).add(dir_A))
+                self.target = pos.add(dir_A).add(dir_A)
+                self.status = 5
+                return
+
+        if ct.get_entity_type(ct.get_tile_building_id(pos)) == EntityType.ROAD:
+            dir_A = pos.direction_to(self.target)
+            if dir_A in DIAGONALS:
+                dir_A = dir_A.rotate_right()
+
+            dir_B = pos.add(dir_A).direction_to(self.target)
+            if dir_B in DIAGONALS:
+                dir_B = dir_B.rotate_right()
+            ct.draw_indicator_line(pos.add(dir_A), pos, 0, 0, 0)
+
+            if ct.can_destroy(pos):
+                ct.destroy(pos)
+            if ct.can_build_conveyor(pos,dir_A):
+                ct.build_conveyor(pos,dir_A)
+                return
+
+        dir_A = pos.direction_to(self.target)
+        if ct.get_tile_env(pos.add(dir_A)) == Environment.WALL and ct.get_entity_type(ct.get_tile_building_id(pos)) != EntityType.BRIDGE:
+            if ct.can_destroy(pos):
+                ct.destroy(pos)
+
+            goal = pos.add(dir_A).add(dir_A)
+            if ct.get_entity_type(ct.get_tile_building_id(goal)) == EntityType.CONVEYOR or ct.get_entity_type(
+                    ct.get_tile_building_id(goal)) == EntityType.ROAD or ct.get_tile_env(goal) == Environment.EMPTY:
+                ct.draw_indicator_line(pos, pos.add(dir_A).add(dir_A), 0, 200, 0)
+                if ct.can_build_bridge(pos,pos.add(dir_A).add(dir_A)):
+                    ct.build_bridge(pos,pos.add(dir_A).add(dir_A))
+
+                    self.target = pos.add(dir_A).add(dir_A)
+                    self.status = 5
+                    return
+
+            for i in DIAGONALS:
+                goal = pos.add(dir_A).add(dir_A).add(i)
+                ct.draw_indicator_line(pos, goal, 0, 200, 0)
+                if ct.get_entity_type(ct.get_tile_building_id(goal)) == EntityType.CONVEYOR or ct.get_entity_type(ct.get_tile_building_id(goal)) == EntityType.ROAD or ct.get_tile_env(goal) == Environment.EMPTY:
+                    if ct.can_build_bridge(pos, goal):
+
+                        ct.build_bridge(pos, goal)
+
+                        self.target = goal
+                        self.status = 5
+                        return
+
+
+        if dir_A in DIAGONALS:
+            dir_A = dir_A.rotate_right()
+        dir_B = pos.add(dir_A).direction_to(self.target)
+        if dir_B in DIAGONALS:
+            dir_B = dir_B.rotate_right()
+        dir_C = pos.add(dir_A).add(dir_B).direction_to(self.target)
+        ct.draw_indicator_line(pos.add(dir_A), pos, 0, 0, 0)
+
+        if ct.can_destroy(pos.add(dir_A)) and ct.get_entity_type(ct.get_tile_building_id(pos.add(dir_A))) != EntityType.CONVEYOR:
+            ct.destroy(pos.add(dir_A))
+
+
+        if ct.can_build_conveyor(pos.add(dir_A), dir_B):
+            ct.build_conveyor(pos.add(dir_A), dir_B)
+            #ct.build_bridge(pos.add(dir_A), pos.add(dir_A).add(dir_B))
+
+        '''  WORKING ON CHANGING TO BRIDGES
+        if ct.can_build_bridge(pos.add(dir_A), pos.add(dir_A).add(dir_B).add(dir_C)):
+            ct.build_bridge(pos.add(dir_A), pos.add(dir_A).add(dir_B).add(dir_C))
+            goal = pos.add(dir_A).add(dir_B).add(dir_C)
+            self.target = goal
+            self.status = 5
+            return
+
+        elif ct.can_build_bridge(pos.add(dir_A), pos.add(dir_A).add(dir_B)):
+            ct.build_bridge(pos.add(dir_A), pos.add(dir_A).add(dir_B))
+        '''
+
+        self.dir = dir_A
+        if ct.can_move(self.dir):
+            ct.move(self.dir)
+            self.last_position = pos
+
+
+        if ct.get_position().distance_squared(self.core_pos) <= 4:
+            self.status = 3
+
+
+    def move(self, ct):
+        pos = ct.get_position()
+        move_dir = pos.direction_to(self.target)
+
+        for i in range(8):
+            ct.draw_indicator_dot(pos.add(move_dir), 250, 250, 250)
+            if pos.add(move_dir) == self.last_position:
+                move_dir = move_dir.rotate_left()
+                ct.draw_indicator_dot(pos, 250, 0, 0)
+                pass
+            building_id = ct.get_tile_building_id(pos.add(move_dir))
+            if not(ct.is_tile_passable(pos.add(move_dir))) and ct.can_destroy(pos.add(move_dir)) and ct.get_entity_type(building_id) != EntityType.HARVESTER:    # Remove obstacles
+                ct.destroy(pos.add(move_dir))
+            if ct.can_move(move_dir):
+                break
+            elif ct.can_build_road(pos.add(move_dir)):
+                ct.build_road(pos.add(move_dir))
+                if ct.can_move(move_dir):
+                    break
+            else: # else move clockwise around the target
+                move_dir = move_dir.rotate_left()
+            if i == 7:
+                return False
+        self.last_position = pos
+        self.dir = move_dir
+
+
+    def go_to(self, ct, status=3):
+        pos = ct.get_position()
+        move_dir = pos.direction_to(self.target)
+
+        for i in range(8):
+            ct.draw_indicator_dot(pos.add(move_dir), 250, 250, 250)
+            if pos.add(move_dir) == self.last_position:
+                move_dir = move_dir.rotate_left()
+                ct.draw_indicator_dot(pos, 250, 0, 0)
+                pass
+            building_id = ct.get_tile_building_id(pos.add(move_dir))
+            if not (ct.is_tile_passable(pos.add(move_dir))) and ct.can_destroy(
+                    pos.add(move_dir)) and ct.get_entity_type(building_id) != EntityType.HARVESTER:  # Remove obstacles
+                ct.destroy(pos.add(move_dir))
+            if ct.can_move(move_dir):
+                break
+            elif ct.can_build_road(pos.add(move_dir)):
+                ct.build_road(pos.add(move_dir))
+                if ct.can_move(move_dir):
+                    break
+            else:  # else move clockwise around the target
+                move_dir = move_dir.rotate_left()
+            if i == 7:
+                return False
+        self.last_position = pos
+        self.dir = move_dir
+        ct.move(self.dir)
+
+        if ct.get_position() == self.target:
+            self.status = status
+
 
     def run(self, ct: Controller) -> None:
+        if ct.get_entity_type() == EntityType.CORE:
+            close_vision_tiles = ct.get_nearby_tiles(5)
+            core_position_x, core_position_y = ct.get_position()[0], ct.get_position()[1]
+            possible_core_locations = [
+                [ct.get_map_width() - core_position_x, core_position_y], # Horizontal Flip
+                [core_position_x, ct.get_map_height() - core_position_y], # Vertical Flip
+                [ct.get_map_width() - core_position_x, ct.get_map_height() - core_position_y]] # Rotation
 
-        etype = ct.get_entity_type()
+            # First 3 bots have to find enemy base
+            if self.num_spawned < 3:
+                spawn_pos = ct.get_position().add(Direction.NORTH)
+                if ct.can_spawn(spawn_pos):
+                    ct.spawn_builder(spawn_pos)
 
-        if etype == EntityType.CORE:  # ADD MARKER STUFF
+                    # Place marker, so bot knows where to go
+                    bot_id = ct.get_tile_builder_bot_id(spawn_pos)
+                    marker_status = 1
+                    message = (
+                            marker_status * (2**28)
+                            + bot_id * (2**20)
+                            + possible_core_locations[self.num_spawned][0] * (2**6)
+                            + possible_core_locations[self.num_spawned][1])
+                    self.num_spawned += 1
+                    for i in close_vision_tiles:
+                        if ct.is_tile_empty(i) and ct.can_place_marker(i):
+                            ct.place_marker(i, message)
 
-            # Returns positions of titanium and axionite in vision of core
-            tit, ax = self.find_ores(ct)
-            # Should change such that one bot spawned in each direction and ensure only one bot moves towards taking ores in a particular direction
-            # Spawn a builder for every titatium ore in closest position to ore or three minimum baseline (TO ADD)
 
-            if self.num_spawned < len(tit):
-                spawn_dir = ct.get_position().direction_to(self.move_pos(ct, tit[
-                    self.num_spawned]))  # Spawns in unnoccupied tile closest to titanium ore in index
-                spawn_pos = ct.get_position().add(spawn_dir)
-            elif self.num_spawned < 3:
-                spawn_dir = random.choice(DIRECTIONS)  # Randomly chooses position to spawn
-                spawn_pos = ct.get_position().add(spawn_dir)
-            if (self.num_spawned < len(tit) or self.num_spawned < 3) and ct.can_spawn(spawn_pos):
-                ct.spawn_builder(spawn_pos)
-                self.num_spawned += 1
-                if ct.can_place_marker(spawn_pos.add(spawn_dir)):  # Marker to tell bot that it has just spawned
-                    ct.place_marker(spawn_pos.add(spawn_dir), 0)
+        elif ct.get_entity_type() == EntityType.BUILDER_BOT:
 
-        elif etype == EntityType.BUILDER_BOT:
 
-            # Check vision radius
-            vision_tiles = ct.get_nearby_tiles()
-            marker_id_check = 99999999999999  # Arbitrarily large
-            marker_tile = Position(1000, 1000)
-            for tile in vision_tiles:
-                # Read Marker (marker_id can be adapted to reading of other building types in vision radius)
-                building_id = ct.get_tile_building_id(tile)
+            if ct.get_global_resources()[0] < 400 and self.status != 4:
+                return
+            # Just spawned
+            if self.status == 0:
+                self.initialise(ct)
 
-                if ct.get_entity_type(building_id) == EntityType.MARKER:
-                    marker_value = ct.get_marker_value(building_id)
-                    if marker_value == 0 and self.core_pos == Position(1000,
-                                                                       1000) and building_id < marker_id_check:  # Bot has just spwaned
-                        marker_id_check = building_id
-                        marker_tile = tile
-                # CHECK IF CONVEYOR FRIENDLY OR ENEMY
-                # Searches for closest conveyor in vision to itself every turn (NEED to ensure only friendly conveyors)
-                elif (ct.get_entity_type(building_id) == EntityType.CONVEYOR or ct.get_entity_type(
-                        building_id) == EntityType.ARMOURED_CONVEYOR) and tile != ct.get_position() and not self.connect_harvester:
-                    if ct.get_position().distance_squared(tile) <= ct.get_position().distance_squared(
-                            self.closest_conveyor):
-                        self.closest_conveyor = tile
+            # Find enemy core
+            elif self.status == 1:
+                self.find_enemy_core(ct)
 
-            if marker_id_check != 99999999999999:  # Ensures bot destroys its own 0 marker and not that of another bot (core spawns two bots before any bot takes a turn)
-                self.core_pos = ct.get_position()
-                if ct.can_destroy(marker_tile):  # Destroy marker so other bots do not read it incorrectly at later date
-                    ct.destroy(marker_tile)
+            # Tell everyone about enemy core?
+            elif self.status == 2:
+                self.spread_the_news_about_said_enemy_core(ct)
 
-            # Check action radius
-            for d in Direction:
-                check_pos = ct.get_position().add(d)  # MUST ACCOUNT FOR RUNNING OUT OF TITANIUM
+            #Look for ores
+            elif self.status == 3:
+                self.find_ores(ct)
 
-                # Attempt to build harvester
-                if ct.can_build_harvester(check_pos):
-                    check_dir = ct.get_position().direction_to(
-                        check_pos)  # If in position diagonal to harvester then first build conveyor until alongside
-                    if check_dir == Direction.NORTHEAST or check_dir == Direction.NORTHWEST or check_dir == Direction.SOUTHEAST or check_dir == Direction.SOUTHWEST:
-                        # Try to build conveyor 45 deg to left of direction to ore, otherwise try right (does not account for failing in both cases)
-                        if ct.can_build_conveyor(ct.get_position().add(check_dir.rotate_left()),
-                                                 check_dir.rotate_left().opposite()) and ct.get_tile_env(
-                                ct.get_position().add(check_dir.rotate_left())) == Environment.EMPTY and (
-                                ct.get_entity_type(ct.get_tile_building_id(ct.get_position().add(
-                                        check_dir.rotate_right()))) != EntityType.CONVEYOR or ct.get_entity_type(
-                                ct.get_tile_building_id(ct.get_position().add(
-                                        check_dir.rotate_right()))) != EntityType.ARMOURED_CONVEYOR):  # and check that tile to 45 deg right does not contain a conveyor
-                            move_dir = check_dir.rotate_left()
-                            ct.build_conveyor(ct.get_position().add(check_dir.rotate_left()),
-                                              check_dir.rotate_left().opposite())
-                            break
-                        elif ct.can_build_conveyor(ct.get_position().add(check_dir.rotate_right()),
-                                                   check_dir.rotate_right().opposite()) and ct.get_tile_env(
-                                ct.get_position().add(check_dir.rotate_right())) == Environment.EMPTY and (
-                                ct.get_entity_type(ct.get_tile_building_id(ct.get_position().add(
-                                        check_dir.rotate_left()))) != EntityType.CONVEYOR or ct.get_entity_type(
-                                ct.get_tile_building_id(ct.get_position().add(
-                                        check_dir.rotate_left()))) != EntityType.ARMOURED_CONVEYOR):  # and check that tile to 45 deg left does not contain a conveyor
-                            move_dir = check_dir.rotate_right()
-                            ct.build_conveyor(ct.get_position().add(check_dir.rotate_right()),
-                                              check_dir.rotate_right().opposite())
-                            break
-                    else:  # If alongside ore then build harvester     OTHERWISE WAIT FOR ENOUGH CASH (do not build over it)
-                        ct.build_harvester(check_pos)
-                        self.connect_harvester = True
-                        break
+            elif self.status == 4:
+                self.build_conveyor_home(ct)
 
-            tit, ax = self.find_ores(ct)  # OREINTATION OF CONVEYORS DO NOT WORK GOING BACK
-            if self.connect_harvester:  # MAY try to go diagonal which is not closer as cannot move diagonally.
-                if ct.get_position().distance_squared(self.closest_conveyor) < ct.get_position().distance_squared(
-                        self.core_pos):
-                    move_dir = ct.get_position().direction_to(self.move_pos(ct, self.closest_conveyor, True))
-                    new_pos = ct.get_position().add(move_dir)
-                else:
-                    move_dir = ct.get_position().direction_to(self.move_pos(ct, self.core_pos, True))
-                    new_pos = ct.get_position().add(move_dir)
-                if ct.get_entity_type(ct.get_tile_building_id(new_pos)) == EntityType.ROAD:
-                    if ct.can_destroy(new_pos):
-                        ct.destroy(new_pos)
-                if ct.can_build_conveyor(new_pos,
-                                         move_dir):  # Build conveyor back in direction it has come from (does not orientate correctly)
-                    ct.build_conveyor(new_pos, move_dir)
-                elif ct.get_action_cooldown() == 0:
-                    self.connect_harvester = False
-            elif len(
-                    tit) != 0 and ct.get_action_cooldown() == 0:  # If there is a titanium ore in range, move towards it
-                move_dir = ct.get_position().direction_to(
-                    self.move_pos(ct, tit[0], True))  # Direction to move to new position determined by function
-                new_pos = ct.get_position().add(move_dir)  # New position that will be moved to
-                if (ct.get_position().distance_squared(
-                        self.closest_conveyor) <= 1 or ct.get_position().distance_squared(
-                        self.core_pos) <= 1 or ct.get_position().distance_squared(
-                        tit[0]) <= 4) and ct.can_build_conveyor(new_pos,
-                                                                move_dir.opposite()):  # Build conveyor back in direction it has come from
-                    ct.build_conveyor(new_pos, move_dir.opposite())
-                elif ct.can_build_road(new_pos):  # CHange both back to road
-                    move_dir = ct.get_position().direction_to(self.move_pos(ct, tit[0]))
-                    new_pos = ct.get_position().add(move_dir)
-                    if ct.can_build_road(new_pos):
-                        ct.build_road(new_pos)
-            elif ct.get_action_cooldown() == 0:  # Move in same direction as currently facing
-                mov_pos = ct.get_position().add(self.dir)
-                move_dir = ct.get_position().direction_to(self.move_pos(ct,
-                                                                        mov_pos))  # REMOVE TRUE   # Direction to move to new position determined by function
-                new_pos = ct.get_position().add(move_dir)  # New position that will be moved to
-                if ct.can_build_road(new_pos):  # CHange both back to road
-                    ct.build_road(new_pos)
-            # else:      #Fail safe
-            # move_dir = self.dir
-            self.dir = move_dir  # Stores direction currently facing every turn
+            elif self.status == 5:
+                self.go_to(ct, 4)
 
-            # New version of above should build conveyor if it is connected to core
-            # Otherwise build road up to harvester and then retrace steps to nearest conveyor or core (whichever closer)
+            elif self.status == "lost":
+                self.find_ores(ct)
 
-            if ct.can_move(move_dir):  # Move to intended position if it can
-                ct.move(move_dir)
+            elif self.status == "core_defence":
+                self.defence()
 
-            # place a marker on an adjacent tile with the current round number
-            # marker_pos = ct.get_position().add(random.choice(DIRECTIONS))
-            # if ct.can_place_marker(marker_pos):
-            # ct.place_marker(marker_pos, ct.get_current_round())
+            elif self.status == "find foe":
+                self.find_foe()
+
+
+
+
