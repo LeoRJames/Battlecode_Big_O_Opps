@@ -12,6 +12,7 @@ class Player:
         self.map = []
         self.core_pos = Position(1000, 1000)
         self.enemy_core_pos = Position(1000, 1000)  # Records a (central) core position
+        self.pathfinder_start_pos = Position(1000, 1000)
 
     def initialise_map(self, ct):
         for j in range(ct.get_map_width()):
@@ -35,45 +36,66 @@ class Player:
                 self.enemy_core_pos = tile     # Should be algorithm to get central position
                 #ct.draw_indicator_dot(tile, 0, 0, 255)
     
-    def heuristic(self, next, target):     # Pass Positions
+    def heuristic_Chebyshev(self, next, target):     # Pass Positions
         return max(abs(next.x - target.x), abs(next.y - target.y))  # Chebyshev distance
+    
+    def heuristic_squaredEuclidean(self, next, target):
+        return next.distance_squared(target)
 
-    def pathfinder(self, ct, target):       # Pass Position
+    def pathfinder(self, ct, target, start = None, bridge=False):       # Pass Position
+        if start == None:
+            start = ct.get_position()
         q = PriorityQueue()
-        counter = 0
-        q.put((0, counter,  ct.get_position()))
+        moveTile = 0
+        dist = 0
+        q.put((0, moveTile, dist,  start))
         came_from = {}
         cost_so_far = {}
-        came_from[ct.get_position()] = None
-        cost_so_far[ct.get_position()] = 0
+        came_from[start] = None
+        cost_so_far[start] = 0
 
         while not q.empty():
             current = q.get()   # Returns highest priority item on queue
             
-            if current[2] == target:
+            if current[3] == target:
                 break
             
             check_tiles = []
             
-            # Adds all surrounding 
-            for i in range(3):
-                for j in range(3):
-                    if (not (i == 1 and j == 1)) and current[2].x + (i-1) >= 0 and current[2].x + (i-1) < len(self.map[0]) and current[2].y + (j-1) >= 0 and current[2].y + (j-1) < len(self.map) and (self.map[current[2].y + (j-1)][current[2].x + (i-1)][1] in [EntityType.BUILDER_BOT, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.MARKER, EntityType.ROAD, EntityType.CORE] or (self.map[current[2].y + (j-1)][current[2].x + (i-1)][1] == None and self.map[current[2].y + (j-1)][current[2].x + (i-1)][0] != Environment.WALL)):
-                        check_tiles.append((current[2].x + (i-1), current[2].y + (j-1)))
+            # Adds all surrounding
+
+            if bridge:
+                for i in range(7):
+                    for j in range(7):
+                        if (not (i == 3 and j == 3)) and ((((i-3)**2)+((j-3)**2))**(1/2) <= 3) and current[3].x + (i-3) >= 0 and current[3].x + (i-3) < len(self.map[0]) and current[3].y + (j-3) >= 0 and current[3].y + (j-3) < len(self.map) and (self.map[current[3].y + (j-3)][current[3].x + (i-3)][1] in [EntityType.BUILDER_BOT] or (self.map[current[3].y + (j-3)][current[3].x + (i-3)][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.MARKER, EntityType.ROAD, EntityType.CORE] and self.map[current[3].y + (j-3)][current[3].x + (i-3)][2] == ct.get_team()) or (self.map[current[3].y + (j-3)][current[3].x + (i-3)][1] == None and self.map[current[3].y + (j-3)][current[3].x + (i-3)][0] != Environment.WALL)):
+                            check_tiles.append((current[3].x + (i-3), current[3].y + (j-3)))
+            else:
+                for i in range(3):
+                    for j in range(3):
+                        if (not (i == 1 and j == 1)) and current[3].x + (i-1) >= 0 and current[3].x + (i-1) < len(self.map[0]) and current[3].y + (j-1) >= 0 and current[3].y + (j-1) < len(self.map) and (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] in [EntityType.BUILDER_BOT, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.MARKER, EntityType.ROAD, EntityType.CORE] or (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] == None and self.map[current[3].y + (j-1)][current[3].x + (i-1)][0] != Environment.WALL)):
+                            check_tiles.append((current[3].x + (i-1), current[3].y + (j-1)))
             for tile in check_tiles:
-                counter = 0
+                moveTile = 0
+                dist = 3
                 tile_pos = Position(tile[0], tile[1])
-                if current[2].distance_squared(tile_pos) > 1:   # Prefer to move in a straight line rather than diagonally
-                    counter += 1
+                #if current[3].distance_squared(tile_pos) > 1:   # Prefer to move in a straight line rather than diagonally
+                    #counter += 1
                 if self.map[tile[1]][tile[0]][1] == None:   # Prefer not to move over non-passable spaces (to save resources building extra paths)
-                    counter += 1
+                    moveTile += 1
+                dist = dist - current[3].distance_squared(tile_pos) # Prefer to build longest bridge
                 #ct.draw_indicator_dot(tile, 0, 0, 255)
-                new_cost = cost_so_far[current[2]] + 1     # Each move costs one move cooldown whether straight or diagonal
+                if bridge:
+                    new_cost = cost_so_far[current[3]] + tile_pos.distance_squared(current[3])
+                else:
+                    new_cost = cost_so_far[current[3]] + 1     # Each move costs one move cooldown whether straight or diagonal
                 if tile_pos not in cost_so_far or new_cost < cost_so_far[tile_pos]:
                     cost_so_far[tile_pos] = new_cost
-                    priority = new_cost + self.heuristic(tile_pos, target)
-                    q.put((priority, counter, tile_pos))
-                    came_from[tile_pos] = current[2]
+                    if bridge:
+                        priority = new_cost + self.heuristic_squaredEuclidean(tile_pos, target)
+                    else:
+                        priority = new_cost + self.heuristic_Chebyshev(tile_pos, target)
+                    q.put((priority, moveTile, dist, tile_pos))
+                    came_from[tile_pos] = current[3]
             #break
         return came_from, cost_so_far
     
@@ -125,20 +147,19 @@ class Player:
             # Update map with each tile in vision radius each turn
             self.update_map(ct)
             
-            # move in a random direction
-            move_dir = random.choice(DIRECTIONS)
-            move_pos = ct.get_position().add(move_dir)
-            # we need to place a conveyor or road to stand on, before we can move onto a tile
-            if ct.can_build_road(move_pos):
-                ct.build_road(move_pos)
-            if ct.can_move(move_dir):
-                ct.move(move_dir)
+            
 
             if self.enemy_core_pos != Position(1000, 1000):
+                if self.pathfinder_start_pos == Position(1000, 1000):
+                    self.pathfinder_start_pos = ct.get_position()
+                    ct.draw_indicator_dot(self.pathfinder_start_pos, 255, 255, 255)
+                else:
+                    ct.draw_indicator_dot(self.pathfinder_start_pos, 255, 255, 255)
                 count = 0
-                came_from, cost = self.pathfinder(ct, self.core_pos)
+                came_from, cost = self.pathfinder(ct, self.core_pos, self.pathfinder_start_pos, True)
                 path = self.reconstruct_path(came_from, self.core_pos)
                 if self.core_pos in path:
+                    self.pathfinder_start_pos = Position(1000, 1000)
                     for tile in path:
                         if (count % 3) == 0:
                             ct.draw_indicator_dot(tile, 255, 0, 0)
@@ -147,12 +168,31 @@ class Player:
                         elif (count % 3) ==2:
                             ct.draw_indicator_dot(tile, 0, 0, 255)
                         count += 1
-                
+                    ct.resign()
                 else:
-                    ct.draw_indicator_dot(ct.get_position(), 0, 0, 0)
+                    # move in a random direction
+                    move_dir = random.choice(DIRECTIONS)
+                    move_pos = ct.get_position().add(move_dir)
+                    # we need to place a conveyor or road to stand on, before we can move onto a tile
+                    if ct.can_build_road(move_pos):
+                        ct.build_road(move_pos)
+                    if ct.can_move(move_dir):
+                        ct.move(move_dir)
+                
+                #else:
+                    #ct.draw_indicator_dot(ct.get_position(), 0, 0, 0)
                 ct.draw_indicator_dot(self.enemy_core_pos, 255, 255, 0)
                 ct.draw_indicator_dot(self.core_pos, 0, 255, 255)
-                ct.resign()
+                
+            else:
+                # move in a random direction
+                move_dir = random.choice(DIRECTIONS)
+                move_pos = ct.get_position().add(move_dir)
+                # we need to place a conveyor or road to stand on, before we can move onto a tile
+                if ct.can_build_road(move_pos):
+                    ct.build_road(move_pos)
+                if ct.can_move(move_dir):
+                    ct.move(move_dir)
 
             #for y in range(len(self.map)):
             #    for x in range(len(self.map[y])):
