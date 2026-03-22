@@ -1,6 +1,6 @@
 import random
 
-from cambc import Controller, Direction, EntityType, Environment, Position, Team
+from cambc import Controller, Direction, EntityType, Environment, Position
 
 DIRECTIONS = [d for d in Direction if d != Direction.CENTRE]
 
@@ -8,10 +8,12 @@ class Player:
     def __init__(self):
         self.num_spawned = 0 # number of builder bots spawned so far (core)
         self.dir = Direction.CENTRE  #Arbitrary
-        self.core_pos = Position(1000,1000) #Arbitrary farr outside map range
+        self.core_pos = Position(1000,1000) #Arbitrary far outside map range
         self.closest_conveyor = Position(1000,1000)
+        self.closest_bridge = Position(1000,1000)
         self.connect_harvester = False
-    
+        self.map = []
+
     def find_ores(self, ct):        # COULD ACCOUNT FOR WALLS
         # List to store position of un-mined ores in vision
         tit = []
@@ -38,6 +40,29 @@ class Player:
                 if pos.distance_squared(tile) < pos.distance_squared(retpos):   # If closer passable tile, set as tile to move to
                     retpos = tile
         return retpos
+    
+    def find_bridge_end(self,ct,pos):
+        #vector_direction = Position(pos.x - self.core_pos.x, pos.y-self.core_pos.y)
+        #vector_mag = (vector_direction.x**2 + vector_direction.y**2)**0.5
+        #norm = Position(vector_direction.x/vector_mag,vector_direction.y/vector_mag)
+        #bridge_vector = Position(round(3*norm.x),round(3*norm.y))
+        #bridge_end = Position(pos.x-bridge_vector.x,pos.y-bridge_vector.y)
+        #return bridge_end
+    
+        distance = 100000   #Arbitrarily large
+        direction = pos.direction_to(self.core_pos)
+        direction_vector = direction.delta()
+        bridge_end = Position(0,0)
+        ref_bridge_end = pos.add(direction).add(direction)
+        for test_direction in DIRECTIONS:
+                temp_end = ref_bridge_end.add(test_direction)
+                if ((temp_end.x-pos.x)**2 + (temp_end.y-pos.y)**2) > 9:
+                    continue
+                check_dist = temp_end.distance_squared(self.core_pos)
+                if check_dist < distance:
+                    distance = check_dist
+                    bridge_end = temp_end
+        return bridge_end
 
 
     def run(self, ct: Controller) -> None:
@@ -65,6 +90,14 @@ class Player:
 
         elif etype == EntityType.BUILDER_BOT:
 
+            # Initialise map 2d array to map dimensions (ixj)
+            if self.map == []:
+                for j in range(ct.get_map_width()):
+                    row = []
+                    for i in range(ct.get_map_height()):
+                        row.append([0, 0, 0])
+                    self.map.append(row)
+
             # Check vision radius
             vision_tiles = ct.get_nearby_tiles()
             marker_id_check = 99999999999999    # Arbitrarily large
@@ -72,7 +105,6 @@ class Player:
             for tile in vision_tiles:
                 # Read Marker (marker_id can be adapted to reading of other building types in vision radius)
                 building_id = ct.get_tile_building_id(tile)
-                building_team_for_conveyor = ct.get_team(building_id)
 
                 if ct.get_entity_type(building_id) == EntityType.MARKER:
                     marker_value = ct.get_marker_value(building_id)
@@ -80,13 +112,16 @@ class Player:
                         marker_id_check = building_id
                         marker_tile = tile
                 # CHECK IF CONVEYOR FRIENDLY OR ENEMY
-                
                 # Searches for closest conveyor in vision to itself every turn (NEED to ensure only friendly conveyors)
-
-                elif (ct.get_entity_type(building_id) == EntityType.CONVEYOR or ct.get_entity_type(building_id) == EntityType.ARMOURED_CONVEYOR) and tile != ct.get_position() and not self.connect_harvester and building_team_for_conveyor == Team.A:
+                elif (ct.get_entity_type(building_id) == EntityType.CONVEYOR or ct.get_entity_type(building_id) == EntityType.ARMOURED_CONVEYOR) and tile != ct.get_position() and not self.connect_harvester:
                     if ct.get_position().distance_squared(tile) <= ct.get_position().distance_squared(self.closest_conveyor):
                         self.closest_conveyor = tile
-                            
+            
+            for tile in ct.get_nearby_tiles():
+                self.map[tile.y][tile.x][0] = ct.get_tile_env(tile)    # Sets environment type of tile (EMPTY, WALL, ORE_TITANIUM, ORE_AXIONITE)
+                self.map[tile.y][tile.x][1] = ct.get_entity_type(ct.get_tile_building_id(tile))    # Sets Entity_Type on tile (BUILDER_BOT, CORE, GUNNER, SENTINEL, BREACH, LAUNCHER, CONVEYOR, SPLITTER, ARMOURED_CONVEYOR, BRIDGE, HARVESTER, FOUNDRY, ROAD, BARRIER, MARKER)
+                self.map[tile.y][tile.x][2] = ct.get_team(ct.get_tile_building_id(tile))  # Sets the team of the building
+
             if marker_id_check != 99999999999999:   # Ensures bot destroys its own 0 marker and not that of another bot (core spawns two bots before any bot takes a turn)
                 self.core_pos = ct.get_position()
                 if ct.can_destroy(marker_tile):   # Destroy marker so other bots do not read it incorrectly at later date
@@ -101,13 +136,15 @@ class Player:
                     check_dir = ct.get_position().direction_to(check_pos)   # If in position diagonal to harvester then first build conveyor until alongside
                     if check_dir == Direction.NORTHEAST or check_dir == Direction.NORTHWEST or check_dir == Direction.SOUTHEAST or check_dir == Direction.SOUTHWEST:
                         # Try to build conveyor 45 deg to left of direction to ore, otherwise try right (does not account for failing in both cases)
-                        if ct.can_build_conveyor(ct.get_position().add(check_dir.rotate_left()), check_dir.rotate_left().opposite()) and ct.get_tile_env(ct.get_position().add(check_dir.rotate_left())) == Environment.EMPTY and (ct.get_entity_type(ct.get_tile_building_id(ct.get_position().add(check_dir.rotate_right()))) != EntityType.CONVEYOR or ct.get_entity_type(ct.get_tile_building_id(ct.get_position().add(check_dir.rotate_right()))) != EntityType.ARMOURED_CONVEYOR): # and check that tile to 45 deg right does not contain a conveyor
-                            move_dir = check_dir.rotate_left()
-                            ct.build_conveyor(ct.get_position().add(check_dir.rotate_left()), check_dir.rotate_left().opposite())                           
+                        if ct.can_build_bridge(ct.get_position().add(check_dir.rotate_left()),self.find_bridge_end(ct,ct.get_position()).add(check_dir.rotate_left())) and ct.get_tile_env(ct.get_position().add(check_dir.rotate_left())) == Environment.EMPTY and (ct.get_entity_type(ct.get_tile_building_id(ct.get_position().add(check_dir.rotate_left()))) != (EntityType.CONVEYOR or EntityType.ARMOURED_CONVEYOR or EntityType.BRIDGE)): # and check that tile to 45 deg right does not contain a conveyor or bridge
+                            move_dir = check_dir.rotate_left()                          
+                            bridge_end = self.find_bridge_end(ct,ct.get_position())
+                            ct.build_bridge(ct.get_position().add(check_dir.rotate_left()),self.find_bridge_end(ct,ct.get_position()).add(check_dir.rotate_left()))
                             break
-                        elif ct.can_build_conveyor(ct.get_position().add(check_dir.rotate_right()), check_dir.rotate_right().opposite()) and ct.get_tile_env(ct.get_position().add(check_dir.rotate_right())) == Environment.EMPTY and (ct.get_entity_type(ct.get_tile_building_id(ct.get_position().add(check_dir.rotate_left()))) != EntityType.CONVEYOR or ct.get_entity_type(ct.get_tile_building_id(ct.get_position().add(check_dir.rotate_left()))) != EntityType.ARMOURED_CONVEYOR):   # and check that tile to 45 deg left does not contain a conveyor
-                            move_dir = check_dir.rotate_right()
-                            ct.build_conveyor(ct.get_position().add(check_dir.rotate_right()), check_dir.rotate_right().opposite())
+                        elif ct.can_build_bridge(ct.get_position().add(check_dir.rotate_right()),self.find_bridge_end(ct,ct.get_position()).add(check_dir.rotate_right())) and ct.get_tile_env(ct.get_position().add(check_dir.rotate_right())) == Environment.EMPTY and (ct.get_entity_type(ct.get_tile_building_id(ct.get_position().add(check_dir.rotate_right()))) != (EntityType.CONVEYOR or EntityType.ARMOURED_CONVEYOR or EntityType.BRIDGE)): # and check that tile to 45 deg right does not contain a conveyor or bridge
+                            move_dir = check_dir.rotate_right()                          
+                            bridge_end = self.find_bridge_end(ct,ct.get_position())
+                            ct.build_bridge(ct.get_position().add(check_dir.rotate_right()),self.find_bridge_end(ct,ct.get_position()).add(check_dir.rotate_right()))
                             break
                     else:   # If alongside ore then build harvester     OTHERWISE WAIT FOR ENOUGH CASH (do not build over it)
                         ct.build_harvester(check_pos)
