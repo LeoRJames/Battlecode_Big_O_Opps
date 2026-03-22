@@ -23,14 +23,15 @@ class Player:
     def update_map(self, ct):
         for tile in ct.get_nearby_tiles():
             self.map[tile.y][tile.x][0] = ct.get_tile_env(tile)    # Sets environment type of tile (EMPTY, WALL, ORE_TITANIUM, ORE_AXIONITE)
-            self.map[tile.y][tile.x][1] = ct.get_entity_type(ct.get_tile_building_id(tile))    # Sets Entity_Type on tile (BUILDER_BOT, CORE, GUNNER, SENTINEL, BREACH, LAUNCHER, CONVEYOR, SPLITTER, ARMOURED_CONVEYOR, BRIDGE, HARVESTER, FOUNDRY, ROAD, BARRIER, MARKER, None)
+            if ct.get_tile_building_id(tile) != None:
+                self.map[tile.y][tile.x][1] = ct.get_entity_type(ct.get_tile_building_id(tile))    # Sets Entity_Type on tile (CORE, GUNNER, SENTINEL, BREACH, LAUNCHER, CONVEYOR, SPLITTER, ARMOURED_CONVEYOR, BRIDGE, HARVESTER, FOUNDRY, ROAD, BARRIER, MARKER, None)
             self.map[tile.y][tile.x][2] = ct.get_team(ct.get_tile_building_id(tile))  # Sets the team of the building
             if ct.get_entity_type(ct.get_tile_building_id(tile)) == EntityType.CORE and ct.get_team(ct.get_tile_building_id(tile)) == ct.get_team(ct.get_id()):
-                self.core_pos == tile
-                ct.draw_indicator_dot(tile, 0, 255, 0)
+                self.core_pos = tile
+                #ct.draw_indicator_dot(tile, 0, 255, 0)
             elif ct.get_entity_type(ct.get_tile_building_id(tile)) == EntityType.CORE and ct.get_team(ct.get_tile_building_id(tile)) != ct.get_team(ct.get_id()):
-                self.enemy_core_pos == tile     # Should be algorithm to get central position
-                ct.draw_indicator_dot(tile, 0, 0, 255)
+                self.enemy_core_pos = tile     # Should be algorithm to get central position
+                #ct.draw_indicator_dot(tile, 0, 0, 255)
 
     def core_killer(self, ct):
         # Move to self.enemy_core_pos
@@ -41,21 +42,23 @@ class Player:
         # Move to self.enemy_core_pos
         pass
 
-    def heuristic(self, ct, next, target):     # Passes Positions
-        return next.distance_squared(target)
+    def heuristic(self, next, target):     # Passes Positions
+        return max(abs(next.x - target.x), abs(next.y - target.y))
 
     def pathfinder(self, ct, target):       # Passes position
         q = PriorityQueue()
-        q.put((ct.get_position(), 0))
+        counter = 0
+        q.put((0, counter,  ct.get_position()))
         came_from = {}
         cost_so_far = {}
         came_from[ct.get_position()] = None
         cost_so_far[ct.get_position()] = 0
+        counter += 1
 
         while not q.empty():
             current = q.get()   # Returns highest priority item on queue
             
-            if current == target:
+            if current[2] == target:
                 break
             
             check_tiles = []
@@ -63,17 +66,32 @@ class Player:
             # Adds all surrounding 
             for i in range(3):
                 for j in range(3):
-                    if self.map[current.x + (i-1)][current.y + (j-1)][1] == (EntityType.BUILDER_BOT or EntityType.ARMOURED_CONVEYOR or EntityType.BRIDGE or EntityType.CONVEYOR or EntityType.MARKER or EntityType.ROAD) and current.x + (i-1) >= 0 and current.x + (i-1) < len(self.map[0]) and current.y + (j-1) >= 0 and current.y + (j-1) < len(self.map):
-                        check_tiles.append((current.x + (i-1), current.y + (j-1)))
+                    if (not (i == 1 and j == 1)) and current[2].x + (i-1) >= 0 and current[2].x + (i-1) < len(self.map[0]) and current[2].y + (j-1) >= 0 and current[2].y + (j-1) < len(self.map) and self.map[current[2].y + (j-1)][current[2].x + (i-1)][1] in [EntityType.BUILDER_BOT, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.MARKER, EntityType.ROAD, EntityType.CORE]:
+                        check_tiles.append((current[2].x + (i-1), current[2].y + (j-1)))
             for tile in check_tiles:
+                #ct.draw_indicator_dot(tile, 0, 0, 255)
                 tile_pos = Position(tile[0], tile[1])
-                new_cost = cost_so_far[current] + 1     # Each move costs one move cooldown whether straight or diagonal
+                new_cost = cost_so_far[current[2]] + 1     # Each move costs one move cooldown whether straight or diagonal
                 if tile_pos not in cost_so_far or new_cost < cost_so_far[tile_pos]:
                     cost_so_far[tile_pos] = new_cost
                     priority = new_cost + self.heuristic(tile_pos, target)
-                    q.put((tile_pos, priority))
-                    came_from[tile_pos] = current
+                    q.put((priority, counter, tile_pos))
+                    came_from[tile_pos] = current[2]
+                    counter += 1
+            #break
         return came_from, cost_so_far
+    
+    def reconstruct_path(self, came_from, goal):
+        if goal not in came_from:
+            return []  # no path found
+        path = []
+        cur = goal
+        while cur is not None:
+            path.append(cur)
+            cur = came_from[cur]
+        path.reverse()
+        return path
+
 
     def run(self, ct: Controller) -> None:
         etype = ct.get_entity_type()
@@ -104,15 +122,41 @@ class Player:
                 ct.move(move_dir)
 
             if self.enemy_core_pos != Position(1000, 1000):
-                ct.draw_indicator_dot(ct.get_position(), 255, 0, 0)
-                path, cost = self.pathfinder(ct, self.core_pos)
-                for tile in path:
-                    ct.draw_indicator_dot(tile, 100, 100, 100)
+                count = 0
+                came_from, cost = self.pathfinder(ct, self.core_pos)
+                path = self.reconstruct_path(came_from, self.core_pos)
+                if self.core_pos in path:
+                    for tile in path:
+                        if (count % 3) == 0:
+                            ct.draw_indicator_dot(tile, 255, 0, 0)
+                        elif (count % 3) ==1:
+                            ct.draw_indicator_dot(tile, 0, 255, 0)
+                        elif (count % 3) ==2:
+                            ct.draw_indicator_dot(tile, 0, 0, 255)
+                        count += 1
+                
+                else:
+                    ct.draw_indicator_dot(ct.get_position(), 0, 0, 0)
+                ct.draw_indicator_dot(self.enemy_core_pos, 255, 255, 0)
+                ct.draw_indicator_dot(self.core_pos, 0, 255, 255)
+                ct.resign()
 
             #for y in range(len(self.map)):
-            #    for x in range(len(self.map[y])):
-            #        if self.map[y][x][1] == EntityType.CORE:
-            #            ct.draw_indicator_dot(Position(x,y), 100, 100, 100)
+                #for x in range(len(self.map[y])):
+                    #if self.map[y][x][1] == EntityType.BUILDER_BOT:
+                    #    ct.draw_indicator_dot(Position(x,y), 0, 0, 0)
+                    #elif self.map[y][x][1] == EntityType.ARMOURED_CONVEYOR:
+                    #    ct.draw_indicator_dot(Position(x,y), 255, 0, 0)
+                    #elif self.map[y][x][1] == EntityType.BRIDGE:
+                    #    ct.draw_indicator_dot(Position(x,y), 0, 255, 0)
+                    #elif self.map[y][x][1] == EntityType.CONVEYOR:
+                    #    ct.draw_indicator_dot(Position(x,y), 0, 0, 255)
+                    #elif self.map[y][x][1] == EntityType.MARKER:
+                    #    ct.draw_indicator_dot(Position(x,y), 100, 100, 100)
+                    #elif self.map[y][x][1] == EntityType.ROAD:
+                    #    ct.draw_indicator_dot(Position(x,y), 255, 255, 255)
+                    #if self.map[y][x][1] in [EntityType.BUILDER_BOT, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.MARKER, EntityType.ROAD]:
+                    #    ct.draw_indicator_dot(Position(x,y), 0, 0, 0)
             #        elif self.map[y][x][0] == Environment.EMPTY:
             #            ct.draw_indicator_dot(Position(x,y), 0, 255, 0)
             #        elif self.map[y][x][0] == Environment.WALL:
