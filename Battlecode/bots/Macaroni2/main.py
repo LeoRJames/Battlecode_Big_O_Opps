@@ -75,14 +75,9 @@ class Player:
             building_id = ct.get_tile_building_id(self.target)
             if building_id and ct.get_entity_type(building_id) == EntityType.CORE: # ENEMY CORE HAS BEEN FOUND!
 
-                vision_tiles = ct.get_nearby_tiles()
-                for i in vision_tiles:
-                    idd = ct.get_tile_building_id(i)
-                    if idd and ct.get_entity_type(idd) == EntityType.CORE:
-                        ct.draw_indicator_dot(i, 255, 255, 255)
+                enemy_core_x, enemy_core_y = self.target.x, self.target.y
+                self.enemy_core_position = self.target
                 self.target = self.core_pos
-                enemy_core_x, enemy_core_y = ct.get_position(building_id).x, ct.get_position(building_id).y
-                self.enemy_core_position = ct.get_position(building_id)
                 marker_status = 2
                 bot_id = 0
                 message = (
