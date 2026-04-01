@@ -21,12 +21,13 @@ class Player:
         self.closest_conn_to_core = [Position(1000, 1000), False]   # True if do not adapt
         self.status = 0     # Tells bot what to do
         self.target = Position(1000, 1000)  # Target position for exploring
+        self.transport_resource_var = False
 
     def initialise_map(self, ct):   # Set up 2d array for each tile on map each storing a list of three info pieces (tile type, building, team)
         for j in range(ct.get_map_width()):
             row = []
             for i in range(ct.get_map_height()):
-                row.append([0, 0, 0, 0, 0])
+                row.append([0, 0, 0, [0], 0])
             self.map.append(row)
 
     def update_map(self, ct):
@@ -35,9 +36,11 @@ class Player:
             if ct.get_tile_building_id(tile) != None:
                 self.map[tile.y][tile.x][1] = ct.get_entity_type(ct.get_tile_building_id(tile))    # Sets Entity_Type on tile (CORE, GUNNER, SENTINEL, BREACH, LAUNCHER, CONVEYOR, SPLITTER, ARMOURED_CONVEYOR, BRIDGE, HARVESTER, FOUNDRY, ROAD, BARRIER, MARKER, None)
                 if ct.get_entity_type(ct.get_tile_building_id(tile)) in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.GUNNER, EntityType.BREACH, EntityType.SENTINEL]:
-                    self.map[tile.y][tile.x][3] = ct.get_direction(ct.get_tile_building_id(tile))
+                    self.map[tile.y][tile.x][3][0] = ct.get_direction(ct.get_tile_building_id(tile))   # Sets direction of directional buildings
                 elif ct.get_entity_type(ct.get_tile_building_id(tile)) == EntityType.BRIDGE:
-                    self.map[tile.y][tile.x][3] = ct.get_bridge_target(ct.get_tile_building_id(tile))
+                    self.map[tile.y][tile.x][3][0] = ct.get_bridge_target(ct.get_tile_building_id(tile))   # Sets target of bridge
+                    if tile not in self.map[ct.get_bridge_target(ct.get_tile_building_id(tile)).y][ct.get_bridge_target(ct.get_tile_building_id(tile)).x][3]:   # Sets source of bridges ending at a tile
+                        self.map[ct.get_bridge_target(ct.get_tile_building_id(tile)).y][ct.get_bridge_target(ct.get_tile_building_id(tile)).x][3].append(tile)
                 else:
                     self.map[tile.y][tile.x][3] = None
             else:
@@ -60,6 +63,59 @@ class Player:
                 self.ax.append(tile)
             elif tile in self.ax and ct.get_entity_type(ct.get_tile_building_id(tile)) == EntityType.HARVESTER:
                 self.ax.remove(tile)
+
+    def supply_connectivity(self, ct, start=None, check_back=True):  # ITERATIVE FOR EACH PATH
+        if start is None:
+            start = ct.get_position()
+        # check_back: Flag to first check back to source, then check forward to end
+        harvester_count = [0] # Counts how many harvesters on path (max four, more than this causes backlog)
+        connected = [False]   # False if not connected; True if unknown (not recorded on map); otherwise entity type of what it connects to
+        next_tile = start
+        while check_back:   # Checks back to source
+            check_back = False
+        while not check_back:   # Checks forward to end
+
+            # Could also account for other check back routes (could cause endless route if not ensuring to not recheck routes)
+            left_tile = next_tile.add(self.map[next_tile.y][next_tile.x][3].rotate_left().rotate_left())
+            if self.map[left_tile.y][left_tile.x][1] is EntityType.HARVESTER:
+                harvester_count[0] += 1
+            right_tile = next_tile.add(self.map[next_tile.y][next_tile.x][3].rotate_right().rotate_right())
+            if self.map[right_tile.y][right_tile.x][1] is EntityType.HARVESTER:
+                harvester_count[0] += 1
+
+            # Check for continuing or ending route
+            if self.map[next_tile.y][next_tile.x][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR]:    # Continue in direction of conveyor
+                next_tile = next_tile.add(self.map[next_tile.y][next_tile.x][3][0])
+            elif self.map[next_tile.y][next_tile.x][1] is EntityType.BRIDGE:    # Continue to end point of bridge
+                next_tile = self.map[next_tile.y][next_tile.x][3][0]
+            elif self.map[next_tile.y][next_tile.x][1] in [EntityType.CORE, EntityType.BREACH, EntityType.GUNNER, EntityType.SENTINEL]:    # Valid end point
+                connected = [self.map[next_tile.y][next_tile.x][1]]
+                check_back = True
+            elif self.map[next_tile.y][next_tile.x][1] is EntityType.SPLITTER:  # Assume splitter direction is same direction of conveyor into it
+                left_splitter_harvester_count, left_splitter_connected = self.supply_connectivity(ct, next_tile.add(self.map[next_tile.y][next_tile.x][3].rotate_left().rotate_left()), check_back)
+                for i in len(left_splitter_harvester_count):
+                    harvester_count.append(left_splitter_harvester_count[i])
+                    connected.append(left_splitter_connected[i])
+                forward_splitter_harvester_count, forward_splitter_connected = self.supply_connectivity(ct, next_tile.add(self.map[next_tile.y][next_tile.x][3]), check_back)
+                for i in len(forward_splitter_harvester_count):
+                    harvester_count.append(forward_splitter_harvester_count[i])
+                    connected.append(forward_splitter_connected[i])
+                right_splitter_harvester_count, right_splitter_connected = self.supply_connectivity(ct, next_tile.add(self.map[next_tile.y][next_tile.x][3].rotate_right().rotate_right()), check_back)
+                for i in len(right_splitter_harvester_count):
+                    harvester_count.append(right_splitter_harvester_count[i])
+                    connected.append(right_splitter_connected[i])
+            elif self.map[next_tile.y][next_tile.x][1] is EntityType.FOUNDRY:
+                sum = [-1, 1]
+                for num in sum:
+                    pass
+                pass    # Search surrounding four tile for conveyors or splitters not facing into foundry
+            elif self.map[next_tile.y][next_tile.x][1] is 0:    # Unlnown on map
+                connected = [True]
+                check_back = True
+            else:   # Not connected
+                check_back = [True]
+
+        return harvester_count, connected
     
     def heuristic_Chebyshev(self, next, target):     # Pass Positions
         return max(abs(next.x - target.x), abs(next.y - target.y))  # Chebyshev distance
@@ -235,6 +291,13 @@ class Player:
                         #ct.resign()
                             # Ran out of money
 
+    def transport_resource(self, ct, start=None, target=None):
+        if start is None:   # start is location of ore 
+            start = ct.get_position()
+        if target is None:
+            target = self.target
+        if not self.transport_resource_var:     # Must move towards target and decide what to do
+            if ct.get_position().distance_squared(start) <= 20:    # If in vision radius
     
     def harvest_ore(self, ct, ore):
         if not self.built_harvester[0]:        # If have not built harvester, must move towards it and build
