@@ -92,6 +92,7 @@ class Player:
                 connected = [self.map[next_tile.y][next_tile.x][1]]
                 check_back = True
             elif self.map[next_tile.y][next_tile.x][1] is EntityType.SPLITTER:  # Assume splitter direction is same direction of conveyor into it
+                connected[0] = EntityType.SPLITTER
                 left_splitter_harvester_count, left_splitter_connected = self.supply_connectivity(ct, next_tile.add(self.map[next_tile.y][next_tile.x][3].rotate_left().rotate_left()), check_back)
                 for i in len(left_splitter_harvester_count):
                     harvester_count.append(left_splitter_harvester_count[i])
@@ -104,6 +105,7 @@ class Player:
                 for i in len(right_splitter_harvester_count):
                     harvester_count.append(right_splitter_harvester_count[i])
                     connected.append(right_splitter_connected[i])
+                
             elif self.map[next_tile.y][next_tile.x][1] is EntityType.FOUNDRY:
                 sum = [-1, 1]
                 for num in sum:
