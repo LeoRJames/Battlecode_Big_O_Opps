@@ -42,7 +42,7 @@ class Player:
                     if tile not in self.map[ct.get_bridge_target(ct.get_tile_building_id(tile)).y][ct.get_bridge_target(ct.get_tile_building_id(tile)).x][3]:   # Sets source of bridges ending at a tile
                         self.map[ct.get_bridge_target(ct.get_tile_building_id(tile)).y][ct.get_bridge_target(ct.get_tile_building_id(tile)).x][3].append(tile)
                 else:
-                    self.map[tile.y][tile.x][3] = None
+                    self.map[tile.y][tile.x][3][0] = None
             else:
                 self.map[tile.y][tile.x][1] = None
             if ct.get_tile_builder_bot_id(tile) != None:
@@ -111,7 +111,7 @@ class Player:
                 for num in sum:
                     pass
                 pass    # Search surrounding four tile for conveyors or splitters not facing into foundry
-            elif self.map[next_tile.y][next_tile.x][1] is 0:    # Unlnown on map
+            elif self.map[next_tile.y][next_tile.x][1] == 0:    # Unlnown on map
                 connected = [True]
                 check_back = True
             else:   # Not connected
@@ -293,13 +293,13 @@ class Player:
                         #ct.resign()
                             # Ran out of money
 
-    def transport_resource(self, ct, start=None, target=None):
+    '''def transport_resource(self, ct, start=None, target=None):
         if start is None:   # start is location of ore 
             start = ct.get_position()
         if target is None:
             target = self.target
         if not self.transport_resource_var:     # Must move towards target and decide what to do
-            if ct.get_position().distance_squared(start) <= 20:    # If in vision radius
+            if ct.get_position().distance_squared(start) <= 20:    # If in vision radius'''
     
     def harvest_ore(self, ct, ore):
         if not self.built_harvester[0]:        # If have not built harvester, must move towards it and build
@@ -660,7 +660,7 @@ class Player:
 
             if self.status == 1:  # self.explore()
                 ct.draw_indicator_dot(ct.get_position(), 0, 0, 255)
-                if self.target != Position(1000, 1000) and self.map[self.target.y][self.target.x] == [0, 0, 0, 0, 0] and self.enemy_core_pos == Position(1000, 1000) and ct.get_position() != self.target:    # If not found core and not at target or seen target, move towards target
+                if self.target != Position(1000, 1000) and self.map[self.target.y][self.target.x] == [0, 0, 0, [0], 0] and self.enemy_core_pos == Position(1000, 1000) and ct.get_position() != self.target:    # If not found core and not at target or seen target, move towards target
                     self.explore(ct)
                     ct.draw_indicator_line(ct.get_position(), self.target, 255, 255, 255)
                     #ct.draw_indicator_dot(ct.get_position(), 255, 255, 255)
@@ -679,7 +679,7 @@ class Player:
                                 corner = corner.add(Direction.CENTRE)
                                 if corner == Position(int(ct.get_map_width()/2), int(ct.get_map_height()/2)):
                                     break
-                            if self.map[corner.y][corner.x] == [0, 0, 0, 0, 0] and ct.get_position().distance_squared(corner) < ct.get_position().distance_squared(closest_corner):
+                            if self.map[corner.y][corner.x] == [0, 0, 0, [0], 0] and ct.get_position().distance_squared(corner) < ct.get_position().distance_squared(closest_corner):
                                 closest_corner = corner
                         iteration += 1
                     if closest_corner == Position(1000, 1000):
