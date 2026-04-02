@@ -52,10 +52,12 @@ class Player:
             else:
                 self.map[tile.y][tile.x][4] = None
             self.map[tile.y][tile.x][2] = ct.get_team(ct.get_tile_building_id(tile))  # Sets the team of the building
+            harvester_count, connected = self.supply_connectivity(ct, start=tile)
             if self.enemy_core_pos != Position(1000, 1000) and ct.get_entity_type(ct.get_tile_building_id(tile)) == EntityType.CORE and ct.get_team(ct.get_tile_building_id(tile)) != ct.get_team():
                 self.enemy_core_pos = tile     # Should be algorithm to get central position (use aarnavs search and symmetry stuff for this)
                 #ct.draw_indicator_dot(tile, 0, 0, 255)
-            elif not self.closest_conn_to_core[1] and ct.get_entity_type(ct.get_tile_building_id(tile)) in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.SPLITTER] and ct.get_team(ct.get_tile_building_id(tile)) == ct.get_team() and ct.get_position().distance_squared(tile) < ct.get_position().distance_squared(self.closest_conn_to_core[0]):
+            
+            elif ((not self.closest_conn_to_core[1] and ct.get_entity_type(ct.get_tile_building_id(tile)) in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.SPLITTER] and ct.get_team(ct.get_tile_building_id(tile)) == ct.get_team()) or connected[0] in [EntityType.CORE, True]) and ct.get_position().distance_squared(tile) < ct.get_position().distance_squared(self.closest_conn_to_core[0]):
                 self.closest_conn_to_core[0] = tile
             if ct.get_tile_env(tile) == Environment.ORE_TITANIUM and ct.get_entity_type(ct.get_tile_building_id(tile)) != EntityType.HARVESTER and tile not in self.tit:
                 self.tit.append(tile)
@@ -73,17 +75,28 @@ class Player:
         harvester_count = [0] # Counts how many harvesters on path (max four, more than this causes backlog)
         connected = [False]   # False if not connected; True if unknown (not recorded on map); otherwise entity type of what it connects to
         next_tile = start
+        visited = set()
         while check_back:   # Checks back to source
             check_back = False
         while not check_back:   # Checks forward to end
 
+            if next_tile in visited:
+                ckeck_back = True
+                break
+            visited.add(next_tile)
+
+            if self.map[next_tile.y][next_tile.x][2] != ct.get_team():
+                check_back = True
+                break
+
             # Could also account for other check back routes (could cause endless route if not ensuring to not recheck routes)
-            left_tile = next_tile.add(self.map[next_tile.y][next_tile.x][3].rotate_left().rotate_left())
-            if self.map[left_tile.y][left_tile.x][1] is EntityType.HARVESTER:
-                harvester_count[0] += 1
-            right_tile = next_tile.add(self.map[next_tile.y][next_tile.x][3].rotate_right().rotate_right())
-            if self.map[right_tile.y][right_tile.x][1] is EntityType.HARVESTER:
-                harvester_count[0] += 1
+            if self.map[next_tile.y][next_tile.x][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR]:
+                left_tile = next_tile.add(self.map[next_tile.y][next_tile.x][3][0].rotate_left().rotate_left())
+                if self.map[left_tile.y][left_tile.x][1] is EntityType.HARVESTER:
+                    harvester_count[0] += 1
+                right_tile = next_tile.add(self.map[next_tile.y][next_tile.x][3][0].rotate_right().rotate_right())
+                if self.map[right_tile.y][right_tile.x][1] is EntityType.HARVESTER:
+                    harvester_count[0] += 1
 
             # Check for continuing or ending route
             if self.map[next_tile.y][next_tile.x][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR]:    # Continue in direction of conveyor
@@ -96,15 +109,15 @@ class Player:
             elif self.map[next_tile.y][next_tile.x][1] is EntityType.SPLITTER:  # Assume splitter direction is same direction of conveyor into it
                 connected[0] = EntityType.SPLITTER
                 left_splitter_harvester_count, left_splitter_connected = self.supply_connectivity(ct, next_tile.add(self.map[next_tile.y][next_tile.x][3].rotate_left().rotate_left()), check_back)
-                for i in len(left_splitter_harvester_count):
+                for i in range(len(left_splitter_harvester_count)):
                     harvester_count.append(left_splitter_harvester_count[i])
                     connected.append(left_splitter_connected[i])
                 forward_splitter_harvester_count, forward_splitter_connected = self.supply_connectivity(ct, next_tile.add(self.map[next_tile.y][next_tile.x][3]), check_back)
-                for i in len(forward_splitter_harvester_count):
+                for i in range(len(forward_splitter_harvester_count)):
                     harvester_count.append(forward_splitter_harvester_count[i])
                     connected.append(forward_splitter_connected[i])
                 right_splitter_harvester_count, right_splitter_connected = self.supply_connectivity(ct, next_tile.add(self.map[next_tile.y][next_tile.x][3].rotate_right().rotate_right()), check_back)
-                for i in len(right_splitter_harvester_count):
+                for i in range(len(right_splitter_harvester_count)):
                     harvester_count.append(right_splitter_harvester_count[i])
                     connected.append(right_splitter_connected[i])
                 
@@ -117,7 +130,7 @@ class Player:
                 connected = [True]
                 check_back = True
             else:   # Not connected
-                check_back = [True]
+                check_back = True
 
         return harvester_count, connected
     
@@ -259,15 +272,17 @@ class Player:
         for tile in ct.get_nearby_tiles():  # Find closest passable tile to target in vision
             if ct.get_position() != tile and tile.distance_squared(target) < closest_tile.distance_squared(target) and ct.get_tile_builder_bot_id(tile) == None and self.map[tile.y][tile.x][0] != Environment.WALL and ((self.map[tile.y][tile.x][1] == EntityType.CORE and self.map[tile.y][tile.x][2] == ct.get_team()) or self.map[tile.y][tile.x][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.MARKER, EntityType.ROAD, None]):
                 closest_tile = tile
-        self.explore_target = closest_tile
+        if closest_tile.distance_squared(self.target) < self.explore_target.distance_squared(self.target):
+            self.explore_target = closest_tile
         if closest_tile != Position(1000, 1000):
             came_from_explore, cost_explore, best_tile_unused_1 = self.pathfinder(ct, closest_tile)
             path_explore = self.reconstruct_path(came_from_explore, closest_tile)
             ct.draw_indicator_line(ct.get_position(), closest_tile, 0, 0, 255)
             if len(path_explore) == 0:      # If there is no moveable path to target
-                move_dir = ct.get_position().direction_to(target)
+                move_dir = ct.get_position().direction_to(closest_tile)
                 for i in range(8):
                     move_dir = move_dir.rotate_left()   # Try to move anticlockwise around target
+                    ct.draw_indicator_dot(ct.get_position().add(move_dir), 255, 0, 0)
                     if ct.can_build_road(ct.get_position().add(move_dir)):
                         ct.build_road(ct.get_position().add(move_dir))
                     if ct.can_move(move_dir):
@@ -278,6 +293,8 @@ class Player:
                     ct.draw_indicator_line(ct.get_position(), ct.get_position().add(move_dir), 255, 0, 0)
                     ct.resign()
             else:
+                for i in range(len(path_explore)):
+                    ct.draw_indicator_dot(path_explore[i], 0, 255, 255)
                 if ct.can_build_road(path_explore[1]):  # Fails if trying to build on to core
                     ct.build_road(path_explore[1])
                 if ct.can_move(ct.get_position().direction_to(path_explore[1])):
@@ -348,7 +365,7 @@ class Player:
                 came_from_harvester_conn, cost_from_harvester_conn, best_tile_harvester_conn = self.pathfinder(ct, self.closest_conn_to_core[0], path_first_conv[-2], conv=True)
                 if cost_from_harvester_core[best_tile_harvester_core] <= cost_from_harvester_conn[best_tile_harvester_conn]:   # Must choose to build conveyors back to core or closest conveyor as stored
                     path_from_harvester = self.reconstruct_path(came_from_harvester_core, best_tile_harvester_core)
-                    if len(path_from_harvester) > 1 and len(path_from_harvester) > 5 + (path_first_conv[-2].distance_squared(best_tile_harvester_core))**(1/2):   # Uses bridge if cost of a bridge path around obstacle is less than conveyor path (based on scaling factor)
+                    if len(path_from_harvester) <= 4 or len(path_from_harvester) > 5 + (path_first_conv[-2].distance_squared(best_tile_harvester_core))**(1/2):   # Uses bridge if cost of a bridge path around obstacle is less than conveyor path (based on scaling factor)
                         came_from_harvester, cost_from_harvester, best_tile_harvester_core = self.pathfinder(ct, self.core_pos, path_first_conv[-2], bridge=True)
                         path_from_harvester = self.reconstruct_path(came_from_harvester, best_tile_harvester_core)
                         if len(path_from_harvester) > 1:
@@ -362,7 +379,7 @@ class Player:
                         cost_from_harvester = cost_from_harvester_core
                 else:
                     path_from_harvester = self.reconstruct_path(came_from_harvester_conn, best_tile_harvester_conn)
-                    if len (path_from_harvester) > 1 and len(path_from_harvester) > 5 + (path_first_conv[-2].distance_squared(best_tile_harvester_conn))**(1/2):
+                    if len (path_from_harvester) <= 4 or len(path_from_harvester) > 5 + (path_first_conv[-2].distance_squared(best_tile_harvester_conn))**(1/2):
                         came_from_harvester, cost_from_harvester, best_tile_harvester_conn = self.pathfinder(ct, self.closest_conn_to_core[0], path_first_conv[-2], bridge=True)
                         path_from_harvester = self.reconstruct_path(came_from_harvester, best_tile_harvester_conn)
                         if len(path_from_harvester) > 1:
@@ -436,7 +453,7 @@ class Player:
                     came_from_built_harvester_conn, cost_from_built_harvester_conn, best_tile_built_harvester_conn = self.pathfinder(ct, self.closest_conn_to_core[0], self.built_harvester[1], conv=True)
                     if cost_from_built_harvester_core[best_tile_built_harvester_core] <= cost_from_built_harvester_conn[best_tile_built_harvester_conn]:   # Choose closest between core and stored closest cnveyor
                         path_from_built_harvester = self.reconstruct_path(came_from_built_harvester_core, best_tile_built_harvester_core)
-                        if len(path_from_built_harvester) > 1 and len(path_from_built_harvester) > 5 + (self.built_harvester[1].distance_squared(best_tile_built_harvester_core))**(1/2):   # Uses bridge if cost of a bridge path around obstacle is less than conveyor path (based on scaling factor):
+                        if len(path_from_built_harvester) <= 4 or len(path_from_built_harvester) > 5 + (self.built_harvester[1].distance_squared(best_tile_built_harvester_core))**(1/2):   # Uses bridge if cost of a bridge path around obstacle is less than conveyor path (based on scaling factor):
                             came_from_built_harvester, cost_from_built_harvester, best_tile_built_harvester_core = self.pathfinder(ct, self.core_pos, self.built_harvester[1], bridge=True)
                             path_from_built_harvester = self.reconstruct_path(came_from_built_harvester, best_tile_built_harvester_core)
                             if len(path_from_built_harvester) > 1:
@@ -451,9 +468,11 @@ class Player:
                         
                     else:
                         path_from_built_harvester = self.reconstruct_path(came_from_built_harvester_conn, best_tile_built_harvester_conn)
-                        if len(path_from_built_harvester) > 1 and len(path_from_built_harvester) > 5 + (self.built_harvester[1].distance_squared(best_tile_built_harvester_conn))**(1/2):
+                        if len(path_from_built_harvester) <= 4 or len(path_from_built_harvester) > 5 + (self.built_harvester[1].distance_squared(best_tile_built_harvester_conn))**(1/2):
                             came_from_built_harvester, cost_from_built_harvester, best_tile_built_harvester_conn = self.pathfinder(ct, self.closest_conn_to_core[0], self.built_harvester[1], bridge=True)
                             path_from_built_harvester = self.reconstruct_path(came_from_built_harvester, best_tile_built_harvester_conn)
+                            for i in range(len(path_from_built_harvester)):
+                                ct.draw_indicator_dot(path_from_built_harvester[i], 255, 255, 0)
                             if len(path_from_built_harvester) > 1:
                                 came_from_built_harvester_conv_check, cost_from_built_harvester_conv_check, best_tile_built_harvester_conn_conv_check = self.pathfinder(ct, path_from_built_harvester[1], self.built_harvester[1], conv=True)
                                 if best_tile_built_harvester_conn_conv_check == path_from_built_harvester[1] and cost_from_built_harvester_conv_check[best_tile_built_harvester_conn_conv_check] == (abs(path_from_built_harvester[1].x - self.built_harvester[1].x) + abs(path_from_built_harvester[1].y - self.built_harvester[1].y)):        # If can build conveyors between these points directly
@@ -508,7 +527,7 @@ class Player:
                 #    came_from_built_harvester_conn, cost_from_built_harvester_conn, best_tile_built_harvester_conn = self.pathfinder(ct, self.closest_conn_to_core[0], bridge=True)
                 if cost_from_built_harvester_core[best_tile_built_harvester_core] <= cost_from_built_harvester_conn[best_tile_built_harvester_conn]:   # Choose closest between core and stored closest cnveyor
                     path_from_built_harvester = self.reconstruct_path(came_from_built_harvester_core, best_tile_built_harvester_core)   # BOTTOM LEFT FAILS BECAUSE THE OPTIMAL CONVEYOR POSITION CHANGES TO RIGHT NEXT TO ITSELF WHICH MEANS IT DOESNT CONSIDER CONVEYOR PATH SO ASSUMES IT HAS COMPLETE ROUTE AS CONSTRUCTS ROUTE OF LENGTH ONE
-                    if len(path_from_built_harvester) > 1 and len(path_from_built_harvester) > 5 + (ct.get_position().distance_squared(best_tile_built_harvester_core))**(1/2) or (len(path_from_built_harvester) == 2 and path_from_built_harvester[1] not in [EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR, EntityType.CORE, EntityType.BRIDGE, EntityType.SPLITTER]) or (len(path_from_built_harvester) == 1 and best_tile_built_harvester_core != self.core_pos):    # NOT PERFECT METRIC (COULD CONVERT THIS BACK TO HOW IT WAS BEFORE)
+                    if len(path_from_built_harvester) <= 4 or len(path_from_built_harvester) > 5 + (ct.get_position().distance_squared(best_tile_built_harvester_core))**(1/2) or (len(path_from_built_harvester) == 2 and path_from_built_harvester[1] not in [EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR, EntityType.CORE, EntityType.BRIDGE, EntityType.SPLITTER]) or (len(path_from_built_harvester) == 1 and best_tile_built_harvester_core != self.core_pos):    # NOT PERFECT METRIC (COULD CONVERT THIS BACK TO HOW IT WAS BEFORE)
                         if ct.get_tile_building_id(ct.get_position()) != None and ct.get_entity_type(ct.get_tile_building_id(ct.get_position().add(ct.get_direction(ct.get_tile_building_id(ct.get_position()))))) != EntityType.HARVESTER:
                             came_from_built_harvester, cost_from_built_harvester, best_tile_built_harvester_core = self.pathfinder(ct, self.core_pos, ct.get_position().add(ct.get_direction(ct.get_tile_building_id(ct.get_position()))), bridge=True)
                         else:
@@ -533,7 +552,7 @@ class Player:
                     
                 else:
                     path_from_built_harvester = self.reconstruct_path(came_from_built_harvester_conn, best_tile_built_harvester_conn)
-                    if len(path_from_built_harvester) > 1 and len(path_from_built_harvester) > 5 + ct.get_position().distance_squared(best_tile_built_harvester_conn) or (len(path_from_built_harvester) == 2 and path_from_built_harvester[1] not in [EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR, EntityType.CORE, EntityType.BRIDGE, EntityType.SPLITTER]) or (len(path_from_built_harvester) == 1 and best_tile_built_harvester_conn != self.closest_conn_to_core[0]):
+                    if len(path_from_built_harvester) <= 4 or len(path_from_built_harvester) > 5 + ct.get_position().distance_squared(best_tile_built_harvester_conn) or (len(path_from_built_harvester) == 2 and path_from_built_harvester[1] not in [EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR, EntityType.CORE, EntityType.BRIDGE, EntityType.SPLITTER]) or (len(path_from_built_harvester) == 1 and best_tile_built_harvester_conn != self.closest_conn_to_core[0]):
                         if ct.get_tile_building_id(ct.get_position()) != None and ct.get_entity_type(ct.get_tile_building_id(ct.get_position().add(ct.get_direction(ct.get_tile_building_id(ct.get_position()))))) != EntityType.HARVESTER:
                             came_from_built_harvester, cost_from_built_harvester, best_tile_built_harvester_conn = self.pathfinder(ct, self.closest_conn_to_core[0], ct.get_position().add(ct.get_direction(ct.get_tile_building_id(ct.get_position()))), bridge=True)
                             ct.draw_indicator_line(self.closest_conn_to_core[0], ct.get_position().add(ct.get_direction(ct.get_tile_building_id(ct.get_position()))), 255, 0, 255)
@@ -555,7 +574,7 @@ class Player:
                 if len(path_from_built_harvester) == 0:
                     ct.draw_indicator_line(ct.get_position(), self.core_pos, 255, 255, 255)
                     ct.resign()
-                elif len(path_from_built_harvester) == 1 or (ct.get_position().distance_squared(path_from_built_harvester[1]) == 1 and self.map[path_from_built_harvester[1].y][path_from_built_harvester[1].x][1] in [EntityType.CORE, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.SPLITTER] and self.map[path_from_built_harvester[1].y][path_from_built_harvester[1].x][2] == ct.get_team() and not (self.map[path_from_built_harvester[1].y][path_from_built_harvester[1].x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR] and self.map[path_from_built_harvester[1].y][path_from_built_harvester[1].x][3] == ct.get_position().direction_to(path_from_built_harvester[1]).opposite())) or ((ct.get_position().distance_squared(path_from_built_harvester[0]) == 1 and self.map[path_from_built_harvester[0].y][path_from_built_harvester[0].x][1] in [EntityType.CORE, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.SPLITTER] and self.map[path_from_built_harvester[0].y][path_from_built_harvester[0].x][2] == ct.get_team())):  # Check for being at end of path MAY NEED To ADD TO FOR BRIDGE STUFF
+                elif len(path_from_built_harvester) == 1 or (ct.get_position().distance_squared(path_from_built_harvester[1]) == 1 and self.map[path_from_built_harvester[1].y][path_from_built_harvester[1].x][1] in [EntityType.CORE, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.SPLITTER] and self.map[path_from_built_harvester[1].y][path_from_built_harvester[1].x][2] == ct.get_team() and not (self.map[path_from_built_harvester[1].y][path_from_built_harvester[1].x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR] and self.map[path_from_built_harvester[1].y][path_from_built_harvester[1].x][3][0] == ct.get_position().direction_to(path_from_built_harvester[1]).opposite())) or ((ct.get_position().distance_squared(path_from_built_harvester[0]) == 1 and self.map[path_from_built_harvester[0].y][path_from_built_harvester[0].x][1] in [EntityType.CORE, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.SPLITTER] and self.map[path_from_built_harvester[0].y][path_from_built_harvester[0].x][2] == ct.get_team())):  # Check for being at end of path MAY NEED To ADD TO FOR BRIDGE STUFF
                     self.built_harvester[0] = False
                     self.closest_conn_to_core[1] = False
                     ct.draw_indicator_dot(ct.get_position().add(Direction.NORTH), 255, 255, 255)
@@ -573,6 +592,8 @@ class Player:
                         ct.destroy(ct.get_position())
                     if ct.get_tile_building_id(ct.get_position()) != None and ((ct.get_position().distance_squared(path_from_built_harvester[1]) == 1 and ct.get_direction(ct.get_tile_building_id(ct.get_position())) != ct.get_position().direction_to(path_from_built_harvester[1])) or (ct.get_position().distance_squared(path_from_built_harvester[0]) == 1 and ct.get_direction(ct.get_tile_building_id(ct.get_position())) != ct.get_position().direction_to(path_from_built_harvester[0])) or (ct.get_position() == path_from_built_harvester[0] and ct.get_position().distance_squared(path_from_built_harvester[1]) > 1)) and self.map[ct.get_position().y][ct.get_position().x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR] and self.map[ct.get_position().y][ct.get_position().x][2] == ct.get_team() and ct.can_destroy(ct.get_position()):      # If finds new path that is more optimal but current conveyor faces in the wrong direction must rebuild
                         ct.destroy(ct.get_position())
+                    if len(path_from_built_harvester) > 2 and ct.can_destroy(path_from_built_harvester[1]) and ct.get_entity_type(ct.get_tile_building_id(path_from_built_harvester[1])) in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR] and ((path_from_built_harvester[1].distance_squared(path_from_built_harvester[2]) == 1 and ct.get_direction(ct.get_tile_building_id(path_from_built_harvester[1])) != path_from_built_harvester[1].direction_to(path_from_built_harvester[2]))):# or (path_from_built_harvester[0].distance_squared(path_from_built_harvester[1]) == 1 and ct.get_direction(ct.get_tile_building_id(path_from_built_harvester[0])) != path_from_built_harvester[0].direction_to(path_from_built_harvester[1]))): #or (path_from_built_harvester[0] == path_from_built_harvester[1] and ct.get_position().distance_squared(path_from_built_harvester[1]) > 1)) and self.map[ct.get_position().y][ct.get_position().x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR] and self.map[ct.get_position().y][ct.get_position().x][2] == ct.get_team() and ct.can_destroy(ct.get_position()):      # If finds new path that is more optimal but current conveyor faces in the wrong direction must rebuild
+                        ct.destroy(path_from_built_harvester[1])
                     if ct.get_position().distance_squared(path_from_built_harvester[1]) == 1 and ct.can_build_conveyor(ct.get_position(), ct.get_position().direction_to(path_from_built_harvester[1])):
                         ct.build_conveyor(ct.get_position(), ct.get_position().direction_to(path_from_built_harvester[1]))
                     elif ct.can_build_harvester(path_from_built_harvester[1]):
