@@ -1,6 +1,7 @@
 import random
 from queue import PriorityQueue
 from cambc import Controller, Direction, EntityType, Environment, Position
+import random
 
 # non-centre directions
 DIRECTIONS = [d for d in Direction if d != Direction.CENTRE]
@@ -15,6 +16,7 @@ MINING_TITANIUM = 2
 REPORT_ENEMY_CORE_LOCATION = 4
 GO_TO_ENEMY_CORE = 12123
 ATTACK_ENEMY_CORE = 69
+DEFENCE = 3
 
 
 class Player:
@@ -34,9 +36,9 @@ class Player:
 
 
     def initialise_map(self, ct):
-        for j in range(ct.get_map_width()):
+        for j in range(ct.get_map_height()):
             row = []
-            for i in range(ct.get_map_height()):
+            for i in range(ct.get_map_width()):
                 # [ENVIRONMENT, ENTITY, TEAM, [DIRECTION/BRIDGE TARGET], BUILDER BOT]
                 row.append([0, 0, 0, [0], 0])
             self.map.append(row)
@@ -352,6 +354,10 @@ class Player:
                         self.enemy_core_pos = self.target
                         self.status = GO_TO_ENEMY_CORE
                         print(f"Attacking ENEMY CORE at {self.target}.")
+
+                    elif marker_status == 3:  # DEFEND CORE
+                        self.status = DEFENCE
+                        print(f"Defending.")
 
                     # Destroy marker
                     if ct.can_move(ct.get_position().direction_to(i)):
@@ -1070,7 +1076,7 @@ class Player:
                         closest_corner = corner
                 iteration += 1
             if closest_corner == Position(1000, 1000):
-                self.status = 3  # Switch to defence for now
+                self.status = DEFENCE  # Switch to defence for now
             else:  # Explore to chosen corner
                 self.target = closest_corner
                 self.explore(ct)
@@ -1092,6 +1098,31 @@ class Player:
             ct.draw_indicator_line(ct.get_position(), self.tit[0], 0, 255, 0)
 
 
+    def defence(self, ct):
+        if self.target == Position(1000, 1000):
+            for i in [self.core_pos.add(Direction.NORTHEAST).add(Direction.NORTHEAST), self.core_pos.add(Direction.SOUTHWEST).add(Direction.SOUTHWEST)]:
+                if ct.is_in_vision(i) and ct.get_entity_type(ct.get_tile_building_id(i)) != EntityType.LAUNCHER:
+                    self.target = i
+        if self.target == Position(1000, 1000):
+            print(" Launchers built")
+            self.status = EXPLORING
+
+        if ct.get_position().add(ct.get_position().direction_to(self.target)) == self.target:
+            if ct.get_entity_type(ct.get_tile_building_id(self.target)) != EntityType.LAUNCHER:
+                if ct.can_destroy(self.target):
+                    ct.destroy(self.target)
+            if ct.can_build_launcher(self.target):
+                ct.build_launcher(self.target)
+                print("Built Launcher!")
+                self.target = Position(1000, 1000)
+                return
+            if ct.get_entity_type(ct.get_tile_building_id(self.target)) == EntityType.LAUNCHER:
+                self.target = Position(1000, 1000)
+                return
+        self.explore(ct)
+
+
+
     def gn_attack_enemy_core(self, ct):
         d = ct.get_direction()
         target = ct.get_position()
@@ -1105,6 +1136,9 @@ class Player:
 
 
     def run(self, ct: Controller) -> None:
+        if ct.get_current_round() > 500:
+            ct.resign()
+
         etype = ct.get_entity_type()
 
         if etype == EntityType.CORE:
@@ -1138,6 +1172,25 @@ class Player:
                         if ct.is_tile_empty(i) and ct.can_place_marker(i):
                             ct.place_marker(i, message)
 
+            elif self.num_spawned < 6: # Spawn Defence Bots
+                spawn_pos = ct.get_position()
+                if ct.can_spawn(spawn_pos):
+                    ct.spawn_builder(spawn_pos)
+
+                    # Place marker, so bot knows where to go
+                    bot_id = ct.get_tile_builder_bot_id(spawn_pos)
+                    marker_status = 3
+                    message = (
+                            marker_status * (2 ** 28)
+                            + bot_id * (2 ** 12)
+                            + 0 * (2 ** 6)
+                            + 0
+                    )
+                    self.num_spawned += 1
+                    for i in ct.get_nearby_tiles(5):  # Will sometimes cause errors where builder bot cannot move to tile where marker was placed and destroy it
+                        if ct.is_tile_empty(i) and ct.can_place_marker(i):
+                            ct.place_marker(i, message)
+
             for i in vision_tiles:
                 if self.enemy_core_pos == Position(1000,1000) and ct.get_entity_type(ct.get_tile_building_id(i)) == EntityType.MARKER and ct.get_team(ct.get_tile_building_id(i)) == ct.get_team():
                     marker_value = ct.get_marker_value(ct.get_tile_building_id(i))
@@ -1152,7 +1205,7 @@ class Player:
                         ct.draw_indicator_line(ct.get_position(), self.enemy_core_pos, 0, 0, 0)
                         return
 
-                if self.enemy_core_pos != Position(1000, 1000) and ct.get_unit_count() < 10:
+                if self.enemy_core_pos != Position(1000, 1000) and ct.get_unit_count() < 12:
                     spawn_pos = ct.get_position()
                     if ct.can_spawn(spawn_pos) and ct.get_global_resources()[0] > 800:    # ARBRITARY THRESHOLD
                         ct.spawn_builder(spawn_pos)
@@ -1213,6 +1266,10 @@ class Player:
                 print("Dont mind me, I'm just mining some titanium.")
                 self.mining_titaniam(ct)
 
+            elif self.status == DEFENCE:
+                print(f"Defending Core {self.target}")
+                self.defence(ct)
+
 
 
             # for y in range(len(self.map)):
@@ -1246,3 +1303,16 @@ class Player:
         elif ct.get_entity_type() == EntityType.GUNNER:
 
             self.gn_attack_enemy_core(ct)
+
+        elif ct.get_entity_type() == EntityType.LAUNCHER:
+
+            vision_tiles = ct.get_nearby_tiles()
+            random.shuffle(vision_tiles)
+            for i in ct.get_attackable_tiles():
+                if ct.get_tile_builder_bot_id(i) is not None and ct.get_team(ct.get_tile_builder_bot_id(i)) != ct.get_team():
+                    for j in vision_tiles:
+                        if ct.can_launch(i,j):
+                            ct.launch(i,j)
+                            print("HAHA LOOSER")
+                            ct.draw_indicator_line(i,j,200,0,0)
+                            break

@@ -41,7 +41,7 @@ class Player:
                         self.target = Position(target_x, target_y)
                         self.status = 1
 
-                    if marker_status == 2:
+                    elif marker_status == 2:
                         # Load Position to go attack opponent core
                         target_x = (marker_value % (2 ** 12)) // (2 ** 6)
                         target_y = marker_value % (2 ** 6)
@@ -202,49 +202,122 @@ class Player:
         pos = ct.get_position()
         self.target = self.core_pos
 
-        # BUILD BRIDGE FROM END OF LAST BRIDGE - This if statement should always be true
+        # Try to build conveyor, if not possible, build bridge.
+        dir_A = pos.direction_to(self.target)
+        if dir_A in DIAGONALS:
+            dir_A = dir_A.rotate_left()
+        dir_B = pos.add(dir_A).direction_to(self.target)
+        if dir_B in DIAGONALS:
+            dir_B = dir_B.rotate_left()
+
+        # This code should run only if it reaches a base of a bridge it built earlier
         if ct.get_entity_type(ct.get_tile_building_id(pos)) == EntityType.ROAD or ct.get_tile_building_id(pos) is None:
-            if ct.can_destroy(pos):
-                ct.destroy(pos)
-
-            dir_A = pos.direction_to(self.target)
-            dir_B = pos.add(dir_A).direction_to(self.target)
-            dir_C = pos.add(dir_A).add(dir_B).direction_to(self.target)
-            goals = [pos.add(dir_A).add(dir_B).add(dir_C)] + [pos.add(dir_A).add(dir_B).add(dir_C).add(k) for k in DIRECTIONS] + [pos.add(dir_A).add(dir_B).add(k) for k in DIRECTIONS] + [pos.add(dir_A).add(dir_B).add(k).add(k) for k in DIRECTIONS] + [pos.add(dir_A).add(dir_B).add(k).add(k.rotate_left()) for k in DIRECTIONS] + [pos.add(dir_A).add(dir_B).add(k).add(k.rotate_right()) for k in DIRECTIONS]
-
-            for i in range(len(goals)):
-                ct.draw_indicator_line(pos, goals[i], 10*i, 10*i, 10*i)
-
-                if (ct.can_build_bridge(pos, goals[i])
-                        and (ct.get_tile_building_id(goals[i]) is None or ct.get_team() == ct.get_team(ct.get_tile_building_id(goals[i])))
-                        and ct.get_tile_env(goals[i]) == Environment.EMPTY):
-                    ct.build_bridge(pos, goals[i])
-                    self.target = goals[i]
-                    self.status = 5
-                    return
-            # Cant build bridge anywhere
-            if ct.get_global_resources()[0] < 10 * ct.get_scale_percent(): # resources too low
-
+            if not(ct.can_destroy(pos)):
+                # Path should be an enemy path so not worth caring about imo
+                self.status = 3
                 return
-            self.status = 3
+            ct.destroy(pos)
 
-        elif ct.get_entity_type(ct.get_tile_building_id(pos)) == EntityType.BRIDGE:
-            self.status = 3
+            # If subsequent tile matches the requirement for a conveyor, build one.
+            next_pos = pos.add(dir_A)
+            next_pos_id = ct.get_tile_building_id(next_pos)
+            if ((ct.get_entity_type(next_pos_id) in [EntityType.ROAD, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.CORE] and ct.get_team(next_pos_id) == ct.get_team(next_pos_id))
+                    or (ct.get_tile_env(next_pos) == Environment.EMPTY and next_pos_id is None)):
 
-        elif ct.get_position().distance_squared(self.core_pos) <= 4:
-            self.status = 3
+                # Then, it should be able to build a conveyor (excluding money constraints)
+                if ct.can_build_conveyor(pos, dir_A):
+                    ct.build_conveyor(pos, dir_A)
+                else:
+                    return
+            else:
+                dir_A = pos.direction_to(self.target)
+                dir_B = pos.add(dir_A).direction_to(self.target)
+                dir_C = pos.add(dir_A).add(dir_B).direction_to(self.target)
+                goals = ([pos.add(dir_A).add(dir_B).add(dir_C)] + [pos.add(dir_A).add(dir_B).add(dir_C).add(k) for k in DIRECTIONS]
+                         + [pos.add(dir_A).add(dir_B).add(k) for k in DIRECTIONS] + [pos.add(dir_A).add(dir_B).add(k).add(k) for k in DIRECTIONS]
+                         + [pos.add(dir_A).add(dir_B).add(k).add(k.rotate_left()) for k in DIRECTIONS] + [pos.add(dir_A).add(dir_B).add(k).add(k.rotate_right()) for k in DIRECTIONS])
 
-        elif ct.get_entity_type(ct.get_tile_building_id(pos)) == EntityType.BUILDER_BOT:
+                for i in range(len(goals)):
+                    if (ct.can_build_bridge(pos, goals[i])
+                            and (ct.get_tile_building_id(goals[i]) is None or ct.get_team() == ct.get_team(
+                                ct.get_tile_building_id(goals[i])))
+                            and ct.get_tile_env(goals[i]) == Environment.EMPTY):
+                        ct.build_bridge(pos, goals[i])
+                        self.target = goals[i]
+                        self.status = 5
+                        ct.draw_indicator_line(pos, goals[i], 255, 255, 255)
+                        return
+                # Cant build bridge anywhere
+                if ct.get_global_resources()[0] < 10 * ct.get_scale_percent():  # resources too low
+                    return
+                self.status = 3
             return
 
-        else: # EDGE CASE
+        # If it is standing on a conveyor and needs to build one ahead
+        elif ct.get_entity_type(ct.get_tile_building_id(pos)) in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR]:
+            conveyor_direction = ct.get_direction(ct.get_tile_building_id(pos))
+            base_pos = pos.add(dir_A)
+            base_pos_id = ct.get_tile_building_id(base_pos)
+            next_pos = base_pos.add(dir_B)
+            next_pos_id = ct.get_tile_building_id(next_pos)
+            ct.draw_indicator_line(base_pos, next_pos, 0, 255, 0)
+
+            if base_pos_id is None or (ct.get_entity_type(base_pos_id) == EntityType.ROAD and ct.get_team(base_pos_id) == ct.get_team()):
+                if ct.can_destroy(pos.add(dir_A)):
+                    ct.destroy(pos.add(dir_A))
+
+                if ((ct.get_entity_type(next_pos_id) in [EntityType.ROAD, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.CORE] and ct.get_team(next_pos_id) == ct.get_team())
+                        or (ct.get_tile_env(next_pos) == Environment.EMPTY and next_pos_id is None)):
+                    # Then, it should be able to build a conveyor (excluding money constraints)
+                    if ct.can_build_conveyor(base_pos, dir_B):
+                        ct.build_conveyor(base_pos, dir_B)
+                        if ct.get_entity_type(next_pos_id) in [EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.CORE]:
+                            self.status = 3
+                            return
+                        ct.move(dir_A)
+                    else:
+                        return
+                else:
+                    # Needs to build bridge
+                    pos = pos.add(conveyor_direction)
+                    dir_A = pos.direction_to(self.target)
+                    dir_B = pos.add(dir_A).direction_to(self.target)
+                    dir_C = pos.add(dir_A).add(dir_B).direction_to(self.target)
+                    goals = ([pos.add(dir_A).add(dir_B).add(dir_C)] + [pos.add(dir_A).add(dir_B).add(dir_C).add(k) for k
+                                                                       in DIRECTIONS]
+                             + [pos.add(dir_A).add(dir_B).add(k) for k in DIRECTIONS] + [
+                                 pos.add(dir_A).add(dir_B).add(k).add(k) for k in DIRECTIONS]
+                             + [pos.add(dir_A).add(dir_B).add(k).add(k.rotate_left()) for k in DIRECTIONS] + [
+                                 pos.add(dir_A).add(dir_B).add(k).add(k.rotate_right()) for k in DIRECTIONS])
+
+                    for i in range(len(goals)):
+                        if (ct.can_build_bridge(pos, goals[i])
+                                and (ct.get_tile_building_id(goals[i]) is None or ct.get_team() == ct.get_team(
+                                    ct.get_tile_building_id(goals[i])))
+                                and ct.get_tile_env(goals[i]) == Environment.EMPTY):
+                            ct.build_bridge(pos, goals[i])
+                            self.target = goals[i]
+                            self.status = 5
+                            ct.draw_indicator_line(pos, goals[i], 255, 255, 255)
+                            return
+                    # Cant build bridge anywhere
+                    if ct.get_global_resources()[0] < 10 * ct.get_scale_percent():  # resources too low
+                        return
+                    self.status = 3
+            return
+
+        # probably connected to a bridge which is connected to the core
+        elif ct.get_entity_type(ct.get_tile_building_id(pos)) == EntityType.BRIDGE:
             self.status = 3
+            return
 
-        if ct.get_position().distance_squared(self.core_pos) <= 4:
+        # Something has gone wrong
+        else:
             self.status = 3
+            return
 
 
-    def bb_go_to(self, ct, status=3, set_status=False):
+    def bb_go_to(self, ct, status=3, set_status=False, move=True):
         '''
             If there is e.g. enemy bot on target tile,
         '''
@@ -280,6 +353,8 @@ class Player:
 
         self.last_positions.append(pos)
         self.dir = move_dir
+        if not(move):
+            return self.dir
         ct.move(self.dir)
 
         if set_status and ct.get_position() == self.target:
@@ -297,7 +372,6 @@ class Player:
                 if ct.get_entity_type(ct.get_tile_building_id(i)) == EntityType.CORE:
                     ct.draw_indicator_dot(i, 0, 0, 0)
             self.status = 7
-            self.target = Position(1000,1000)
             return
 
 
@@ -305,23 +379,32 @@ class Player:
         vision_tiles = ct.get_nearby_tiles()
         pos = ct.get_position()
 
-        for i in vision_tiles:
-            if ct.get_entity_type(ct.get_tile_building_id(i)) == EntityType.BRIDGE and ct.get_team() != ct.get_team(ct.get_tile_building_id(i)):
-                if ct.is_in_vision(ct.get_bridge_target(ct.get_tile_building_id(i)))  and (ct.is_tile_empty(ct.get_bridge_target(ct.get_tile_building_id(i)) or ct.get_entity_type(ct.get_tile_building_id(ct.get_bridge_target(ct.get_tile_building_id(i))))) == EntityType.ROAD) and ct.get_bridge_target(ct.get_tile_building_id(i)).distance_squared(self.enemy_core_position) <= 36:
-                    self.target = i
-                    ct.draw_indicator_line(pos, i, 0, 0, 100)
-                elif ct.is_in_vision(ct.get_bridge_target(ct.get_tile_building_id(i))):
-                    ct.draw_indicator_line(pos, ct.get_bridge_target(ct.get_tile_building_id(i)), 200, 0, 0)
-                if pos.distance_squared(i) < pos.distance_squared(self.target) and i.distance_squared(self.enemy_core_position) <= 16:
-                    self.target = i
-                    ct.draw_indicator_line(pos, i, 0, 0, 0)
+        if self.target == self.enemy_core_position: # i.e needs to be updates
+            for i in vision_tiles:
+                if ct.get_entity_type(ct.get_tile_building_id(i)) in [EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR]:
+                    if ct.get_entity_type(ct.get_tile_building_id(i)) == EntityType.BRIDGE and (ct.is_in_vision(ct.get_bridge_target(ct.get_tile_building_id(i)))  and (ct.is_tile_empty(ct.get_bridge_target(ct.get_tile_building_id(i)) or ct.get_entity_type(ct.get_tile_building_id(ct.get_bridge_target(ct.get_tile_building_id(i))))) == EntityType.ROAD) and ct.get_bridge_target(ct.get_tile_building_id(i)).distance_squared(self.enemy_core_position) <= 16):
+                        self.target = ct.get_bridge_target(ct.get_tile_building_id(i))
+                    elif ct.get_entity_type(ct.get_tile_building_id(i)) == EntityType.BRIDGE and (pos.distance_squared(i) < pos.distance_squared(self.target) and ct.get_entity_type(ct.get_tile_building_id(ct.get_bridge_target(ct.get_tile_building_id(i)))) == EntityType.CORE):
+                        self.target = i
+                    elif ct.get_entity_type(ct.get_tile_building_id(i)) in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR] and ct.get_entity_type(ct.get_tile_building_id(i.add(ct.get_direction(ct.get_tile_building_id(i))))) == EntityType.CORE and i.distance_squared(self.enemy_core_position) <= 25:
+                        self.target = i
+                    elif ct.get_entity_type(ct.get_tile_building_id(i)) in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR] and (ct.get_tile_building_id(i.add(ct.get_direction(ct.get_tile_building_id(i)))) is None or (ct.get_entity_type(ct.get_tile_building_id(i.add(ct.get_direction(ct.get_tile_building_id(i))))) == EntityType.ROAD and ct.get_team(ct.get_tile_building_id(i.add(ct.get_direction(ct.get_tile_building_id(i))))) == ct.get_team(ct.get_tile_building_id(i)))) and i.add(ct.get_direction(ct.get_tile_building_id(i))).distance_squared(self.enemy_core_position) <= 25:
+                        self.target = i.add(ct.get_direction(ct.get_tile_building_id(i)))
+
+
 
         self.bb_go_to(ct)
+        if ct.can_destroy(self.target):
+            ct.destroy(self.target)
         if ct.can_build_gunner(self.target, self.target.direction_to(self.enemy_core_position)):
             ct.build_gunner(self.target, self.target.direction_to(self.enemy_core_position))
+            self.target = self.enemy_core_position
+            self.last_positions = []
         if ct.get_position() == self.target:
-            if ct.get_entity_type(ct.get_tile_building_id(ct.get_position())) == EntityType.BRIDGE:
-                ct.self_destruct()
+            if ct.get_entity_type(ct.get_tile_building_id(ct.get_position())) in [EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR] and ct.can_fire(ct.get_position()):
+                ct.fire(ct.get_position())
+                self.target = self.enemy_core_position
+                self.last_positions = []
 
 
     def gn_attack_enemy_core(self, ct):
@@ -404,7 +487,7 @@ class Player:
         elif ct.get_entity_type() == EntityType.BUILDER_BOT:
 
 
-            if ct.get_global_resources()[0] < 200 and self.status != 4:
+            if ct.get_global_resources()[0] < 100 and self.status != 4 and self.status != 5:
                 return
             # Just spawned
             if self.status == 0:
