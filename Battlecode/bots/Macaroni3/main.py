@@ -10,13 +10,15 @@ DIAGONALS = [Direction.NORTHWEST, Direction.NORTHEAST, Direction.SOUTHEAST, Dire
 
 # STATUS CONSTANTS
 INIT = 0
-FIND_ENEMY_CORE = 100
-EXPLORING = 1
-MINING_TITANIUM = 2
-REPORT_ENEMY_CORE_LOCATION = 4
-GO_TO_ENEMY_CORE = 12123
-ATTACK_ENEMY_CORE = 69
-DEFENCE = 3
+FIND_ENEMY_CORE = 1
+REPORT_ENEMY_CORE_LOCATION = 2
+GO_TO_ENEMY_CORE = 3
+ATTACK_ENEMY_CORE = 4
+
+EXPLORING = 5
+MINING_TITANIUM = 6
+
+DEFENCE = 7
 
 
 class Player:
@@ -73,7 +75,7 @@ class Player:
                 self.closest_conn_to_core[0] = tile
             if ct.get_tile_env(tile) == Environment.ORE_TITANIUM and ct.get_entity_type(ct.get_tile_building_id(tile)) != EntityType.HARVESTER and tile not in self.tit:
                 self.tit.append(tile)
-            elif tile in self.tit and (ct.get_entity_type(ct.get_tile_building_id(tile)) == EntityType.HARVESTER or ct.get_team(ct.get_tile_building_id(tile)) != ct.get_team()) and (self.status != 2 or not self.built_harvester[0]):  # Remoce from list if another bot has built harveter on it
+            elif tile in self.tit and (ct.get_entity_type(ct.get_tile_building_id(tile)) == EntityType.HARVESTER or ct.get_team(ct.get_tile_building_id(tile)) != ct.get_team()) and (self.status != MINING_TITANIUM or not self.built_harvester[0]):  # Remoce from list if another bot has built harveter on it
                 self.tit.remove(tile)
             elif ct.get_tile_env(tile) == Environment.ORE_AXIONITE and ct.get_entity_type(ct.get_tile_building_id(tile)) != EntityType.HARVESTER and tile not in self.ax:
                 self.ax.append(tile)
@@ -782,6 +784,14 @@ class Player:
 
 
     def defence(self, ct):
+        if ct.get_hp(ct.get_tile_building_id(self.core_pos)) < 500:
+            self.target = self.core_pos
+            if ct.can_heal(self.core_pos):
+                ct.heal(self.core_pos)
+            self.explore(ct)
+            return
+
+        # Note: building Launchers is Useless
         if self.target == Position(1000, 1000):
             for i in [self.core_pos.add(Direction.NORTHEAST).add(Direction.NORTHEAST), self.core_pos.add(Direction.SOUTHWEST).add(Direction.SOUTHWEST)]:
                 if ct.is_in_vision(i) and ct.get_entity_type(ct.get_tile_building_id(i)) not in [EntityType.LAUNCHER, EntityType.CONVEYOR]:
@@ -789,7 +799,6 @@ class Player:
                     self.target = i
         if self.target == Position(1000, 1000):
             print(" Launchers built")
-            self.status = EXPLORING
             return
 
         if ct.get_position().add(ct.get_position().direction_to(self.target)) == self.target:
