@@ -91,12 +91,16 @@ class Player:
 
             # Could also account for other check back routes (could cause endless route if not ensuring to not recheck routes)
             if self.map[next_tile.y][next_tile.x][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR]:
+
                 left_tile = next_tile.add(self.map[next_tile.y][next_tile.x][3][0].rotate_left().rotate_left())
-                if self.map[left_tile.y][left_tile.x][1] is EntityType.HARVESTER:
-                    harvester_count[0] += 1
+                if not (left_tile.y < 0 or left_tile.y >= ct.get_map_height() or left_tile.x < 0 or left_tile.x >= ct.get_map_width()):
+                    if self.map[left_tile.y][left_tile.x][1] is EntityType.HARVESTER:
+                        harvester_count[0] += 1
+
                 right_tile = next_tile.add(self.map[next_tile.y][next_tile.x][3][0].rotate_right().rotate_right())
-                if self.map[right_tile.y][right_tile.x][1] is EntityType.HARVESTER:
-                    harvester_count[0] += 1
+                if not (right_tile.y < 0 or right_tile.y >= ct.get_map_height() or right_tile.x < 0 or right_tile.x >= ct.get_map_width()):
+                    if self.map[right_tile.y][right_tile.x][1] is EntityType.HARVESTER:
+                        harvester_count[0] += 1
 
             # Check for continuing or ending route
             if self.map[next_tile.y][next_tile.x][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR]:    # Continue in direction of conveyor
@@ -275,11 +279,11 @@ class Player:
         if closest_tile.distance_squared(self.target) < self.explore_target.distance_squared(self.target):
             self.explore_target = closest_tile
         if closest_tile != Position(1000, 1000):
-            came_from_explore, cost_explore, best_tile_unused_1 = self.pathfinder(ct, closest_tile)
-            path_explore = self.reconstruct_path(came_from_explore, closest_tile)
-            ct.draw_indicator_line(ct.get_position(), closest_tile, 0, 0, 255)
+            came_from_explore, cost_explore, best_tile_unused_1 = self.pathfinder(ct, self.explore_target)
+            path_explore = self.reconstruct_path(came_from_explore, self.explore_target)
+            ct.draw_indicator_line(ct.get_position(), self.explore_target, 0, 0, 255)
             if len(path_explore) == 0:      # If there is no moveable path to target
-                move_dir = ct.get_position().direction_to(closest_tile)
+                move_dir = ct.get_position().direction_to(self.explore_target)
                 for i in range(8):
                     move_dir = move_dir.rotate_left()   # Try to move anticlockwise around target
                     ct.draw_indicator_dot(ct.get_position().add(move_dir), 255, 0, 0)
@@ -517,6 +521,7 @@ class Player:
                                 self.built_harvester[1] = path_from_built_harvester[0]
                     
                 else:
+                    self.target = self.built_harvester[1]
                     self.explore(ct, self.built_harvester[1])
             else:   # Connect harvester with conveyors
                 came_from_built_harvester_core, cost_from_built_harvester_core, best_tile_built_harvester_core = self.pathfinder(ct, self.core_pos, conv=True)
@@ -574,7 +579,7 @@ class Player:
                 if len(path_from_built_harvester) == 0:
                     ct.draw_indicator_line(ct.get_position(), self.core_pos, 255, 255, 255)
                     ct.resign()
-                elif len(path_from_built_harvester) == 1 or (ct.get_position().distance_squared(path_from_built_harvester[1]) == 1 and self.map[path_from_built_harvester[1].y][path_from_built_harvester[1].x][1] in [EntityType.CORE, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.SPLITTER] and self.map[path_from_built_harvester[1].y][path_from_built_harvester[1].x][2] == ct.get_team() and not (self.map[path_from_built_harvester[1].y][path_from_built_harvester[1].x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR] and self.map[path_from_built_harvester[1].y][path_from_built_harvester[1].x][3][0] == ct.get_position().direction_to(path_from_built_harvester[1]).opposite())) or ((ct.get_position().distance_squared(path_from_built_harvester[0]) == 1 and self.map[path_from_built_harvester[0].y][path_from_built_harvester[0].x][1] in [EntityType.CORE, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.SPLITTER] and self.map[path_from_built_harvester[0].y][path_from_built_harvester[0].x][2] == ct.get_team())):  # Check for being at end of path MAY NEED To ADD TO FOR BRIDGE STUFF
+                elif len(path_from_built_harvester) == 1 or (ct.get_position().distance_squared(path_from_built_harvester[1]) == 1 and self.map[path_from_built_harvester[1].y][path_from_built_harvester[1].x][1] in [EntityType.CORE, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.SPLITTER] and self.map[path_from_built_harvester[1].y][path_from_built_harvester[1].x][2] == ct.get_team() and not (self.map[path_from_built_harvester[1].y][path_from_built_harvester[1].x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR] and self.map[path_from_built_harvester[1].y][path_from_built_harvester[1].x][3][0] == ct.get_position().direction_to(path_from_built_harvester[1]).opposite()) and self.map[ct.get_position().y][ct.get_position().x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR] and self.map[ct.get_position().y][ct.get_position().x][3][0] == ct.get_position().direction_to(path_from_built_harvester[1])) or ((ct.get_position().distance_squared(path_from_built_harvester[0]) == 1 and self.map[path_from_built_harvester[0].y][path_from_built_harvester[0].x][1] in [EntityType.CORE, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.SPLITTER] and self.map[path_from_built_harvester[0].y][path_from_built_harvester[0].x][2] == ct.get_team())):  # Check for being at end of path MAY NEED To ADD TO FOR BRIDGE STUFF
                     self.built_harvester[0] = False
                     self.closest_conn_to_core[1] = False
                     ct.draw_indicator_dot(ct.get_position().add(Direction.NORTH), 255, 255, 255)
