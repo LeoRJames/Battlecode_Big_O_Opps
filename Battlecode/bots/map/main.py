@@ -36,6 +36,7 @@ class Player:
         self.core_stored_resource = {}
         self.marker_location = Position(1000, 1000)
         self.unreachable_ores = [] # List of unreachable ores
+        self.explore_left = True
 
     def initialise_map(self, ct):   # Set up 2d array for each tile on map each storing a list of three info pieces (tile type, building, team)
         for j in range(ct.get_map_height()):
@@ -324,35 +325,74 @@ class Player:
             path_explore = self.reconstruct_path(came_from_explore, self.explore_target)
             ct.draw_indicator_line(ct.get_position(), self.explore_target, 0, 0, 255)
             if len(path_explore) == 0:      # If there is no moveable path to target
-                if self.move_dir == Direction.CENTRE:
-                    self.move_dir = ct.get_position().direction_to(self.explore_target)
-                if self.move_dir in DIAGONALS:
-                    check_pos = ct.get_position().add(self.move_dir.rotate_right().rotate_right().rotate_right())
-                    if self.map[check_pos.y][check_pos.x][0] == Environment.WALL:
-                        move_dir = self.move_dir.rotate_right().rotate_right()
+                if self.explore_left:
+                    if self.move_dir == Direction.CENTRE:
+                        self.move_dir = ct.get_position().direction_to(self.explore_target)
+                    if self.move_dir in DIAGONALS:
+                        check_pos = ct.get_position().add(self.move_dir.rotate_right().rotate_right().rotate_right())
+                        if self.map[check_pos.y][check_pos.x][0] == Environment.WALL:
+                            move_dir = self.move_dir.rotate_right().rotate_right()
+                        else:
+                            move_dir = self.move_dir
+                    elif self.move_dir in STRAIGHTS:
+                        check_pos = ct.get_position().add(self.move_dir.rotate_right().rotate_right())
+                        if self.map[check_pos.y][check_pos.x][0] == Environment.WALL:
+                            move_dir = self.move_dir.rotate_right()
+                        else:
+                            move_dir = self.move_dir
+                    for i in range(8):
+                        check_pos = ct.get_position().add(move_dir)
+                        if ct.get_tile_builder_bot_id(check_pos) != None:
+                            break
+                        if check_pos.x < 0 or check_pos.x >= ct.get_map_width() or check_pos.y < 0 or check_pos.y >= ct.get_map_height():
+                            self.explore_left = False
+                            break
+                        ct.draw_indicator_dot(check_pos, 255, 0, 0)
+                        if ct.can_build_road(check_pos):
+                            ct.build_road(check_pos)
+                        if ct.can_move(move_dir):
+                            ct.move(move_dir)
+                            self.move_dir = move_dir
+                            break
+                        move_dir = move_dir.rotate_left()
+                    if ct.get_move_cooldown() == 0:
+                        ct.draw_indicator_line(ct.get_position(), ct.get_position().add(move_dir), 255, 0, 0)
+                        #ct.resign()
+                else:
+                    if self.move_dir == Direction.CENTRE:
+                        self.move_dir = ct.get_position().direction_to(self.explore_target)
                     else:
-                        move_dir = self.move_dir
-                elif self.move_dir in STRAIGHTS:
-                    check_pos = ct.get_position().add(self.move_dir.rotate_right().rotate_right())
-                    if self.map[check_pos.y][check_pos.x][0] == Environment.WALL:
-                        move_dir = self.move_dir.rotate_right()
-                    else:
-                        move_dir = self.move_dir
-                for i in range(8):
-                    if ct.get_tile_builder_bot_id(ct.get_position().add(move_dir)) != None:
-                        break
-                    #move_dir = move_dir.rotate_left()   # Try to move anticlockwise around target
-                    ct.draw_indicator_dot(ct.get_position().add(move_dir), 255, 0, 0)
-                    if ct.can_build_road(ct.get_position().add(move_dir)):
-                        ct.build_road(ct.get_position().add(move_dir))
-                    if ct.can_move(move_dir):
-                        ct.move(move_dir)
-                        self.move_dir = move_dir
-                        break
-                    move_dir = move_dir.rotate_left()
-                if ct.get_move_cooldown() == 0:
-                    ct.draw_indicator_line(ct.get_position(), ct.get_position().add(move_dir), 255, 0, 0)
-                    #ct.resign()
+                        self.move_dir = self.move_dir.opposite()
+                    if self.move_dir in DIAGONALS:
+                        check_pos = ct.get_position().add(self.move_dir.rotate_left().rotate_left().rotate_left())
+                        if self.map[check_pos.y][check_pos.x][0] == Environment.WALL:
+                            move_dir = self.move_dir.rotate_left().rotate_left()
+                        else:
+                            move_dir = self.move_dir
+                    elif self.move_dir in STRAIGHTS:
+                        check_pos = ct.get_position().add(self.move_dir.rotate_left().rotate_left())
+                        if self.map[check_pos.y][check_pos.x][0] == Environment.WALL:
+                            move_dir = self.move_dir.rotate_left()
+                        else:
+                            move_dir = self.move_dir
+                    for i in range(8):
+                        check_pos = ct.get_position().add(move_dir)
+                        if ct.get_tile_builder_bot_id(check_pos) != None:
+                            break
+                        if check_pos.x < 0 or check_pos.x >= ct.get_map_width() or check_pos.y < 0 or check_pos.y >= ct.get_map_height():
+                            self.explore_left = True    # Temporary but should actually change target as wil otherwise just continue in loop
+                            break
+                        ct.draw_indicator_dot(check_pos, 255, 0, 0)
+                        if ct.can_build_road(check_pos):
+                            ct.build_road(check_pos)
+                        if ct.can_move(move_dir):
+                            ct.move(move_dir)
+                            self.move_dir = move_dir
+                            break
+                        move_dir = move_dir.rotate_right()
+                    if ct.get_move_cooldown() == 0:
+                        ct.draw_indicator_line(ct.get_position(), ct.get_position().add(move_dir), 255, 0, 0)
+                        #ct.resign()
             else:
                 for i in range(len(path_explore)):
                     ct.draw_indicator_dot(path_explore[i], 0, 255, 255)
@@ -392,8 +432,11 @@ class Player:
                 self.target = ore
                 self.explore(ct, ore)
                 self.target = Position(1000, 1000)
+                if ore.distance_squared(ct.get_position()) < 20:
+                    self.explore_left = True
+                    self.explore_target = Position(1000, 1000)
                 return
-
+            
             # Happens to be on top of ore, move
             if self.map[ct.get_position().y][ct.get_position().x][2] == ct.get_team() and ct.get_position() == ore:
                 print(f"Moving from on top of ore")
@@ -438,8 +481,11 @@ class Player:
                 self.target = ore
                 self.explore(ct, ore)
                 self.target = Position(1000, 1000)
+                if ore.distance_squared(ct.get_position()) <= 2:
+                    self.explore_left = True
+                    self.explore_target = Position(1000, 1000)
                 return
-
+            
             if ct.get_global_resources()[0] < ct.get_harvester_cost()[0] and ct.can_place_marker(ore):
                 print("Bagsying ORE")
                 marker_status = 10
@@ -466,9 +512,12 @@ class Player:
                 if ct.get_position() != self.built_harvester[1]:
                     self.target = self.built_harvester[1]
                     self.explore(ct)
+                    if ct.get_position() == self.built_harvester[1]:
+                        self.explore_left = True
+                        self.explore_target = Position(1000, 1000)
                     return
                 self.built_harvester[1] = None
-
+            
             path_dict, cost, best_end_tile = self.pathfinder(ct, self.core_pos, bridge=True)
             # Check if a path exists to core
             if best_end_tile != self.core_pos:
@@ -977,6 +1026,7 @@ class Player:
                     #ct.draw_indicator_dot(ct.get_position(), 255, 255, 255)
                     if self.enemy_core_pos != Position(1000, 1000):
                         self.explore_target = Position(1000, 1000)
+                        self.explore_left = True
                 elif self.enemy_core_pos != Position(1000, 1000):  # Report enemy core position back to core
                     self.status = 4
                 elif len(self.tit) != 0:    # Mine for ore
@@ -1002,6 +1052,7 @@ class Player:
                         self.explore(ct)
                         if closest_corner in ct.get_nearby_tiles():
                             self.explore_target = Position(1000, 1000)
+                            self.explore_left = True
                     # Find closest corner, move until it is in vision radius (covered by first if)
                     ct.draw_indicator_dot(self.target, 255, 0, 0)
 
@@ -1043,6 +1094,7 @@ class Player:
                     self.explore(ct)
                 else:
                     self.explore_target = Position(1000, 1000)
+                    self.explore_left = True
                     if ct.can_destroy(self.target) and ct.get_entity_type(ct.get_tile_building_id(self.target)) in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR]:
                         ct.destroy(self.target)
 
@@ -1078,6 +1130,7 @@ class Player:
                                         self.target = temp
                                     else:
                                         self.explore_target = Position(1000, 1000)
+                                        self.explore_left = True
                                     if ct.can_destroy(self.target.add(dir)):
                                         ct.destroy(self.target.add(dir))
                                     if ct.can_build_foundry(self.target.add(dir)):
@@ -1096,6 +1149,7 @@ class Player:
                                         self.target = temp
                                     else:
                                         self.explore_target = Position(1000, 1000)
+                                        self.explore_left = True
                                     if ct.can_destroy(self.target.add(dir.rotate_left().rotate_left())):
                                         ct.destroy(self.target.add(dir.rotate_left().rotate_left()))
                                     if ct.can_build_foundry(self.target.add(dir.rotate_left().rotate_left())):
@@ -1114,6 +1168,7 @@ class Player:
                                         self.target = temp
                                     else:
                                         self.explore_target = Position(1000, 1000)
+                                        self.explore_left = True
                                     if ct.can_destroy(self.target.add(dir.rotate_right().rotate_right())):
                                         ct.destroy(self.target.add(dir.rotate_right().rotate_right()))
                                     if ct.can_build_foundry(self.target.add(dir.rotate_right().rotate_right())):
@@ -1128,6 +1183,7 @@ class Player:
                                 self.target = Position(1000, 1000)
                                 self.marker_location = Position(1000, 1000)
                                 self.explore_target = Position(1000, 1000)
+                                self.explore_left = True
                             else:
                                 temp = self.target
                                 self.target = self.marker_location
