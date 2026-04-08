@@ -63,7 +63,7 @@ class Player:
             self.map[tile.y][tile.x][2] = ct.get_team(ct.get_tile_building_id(tile))  # Sets the team of the building
             harvester_count, connected = self.supply_connectivity(ct, start=tile)
             if self.enemy_core_pos != Position(1000, 1000) and ct.get_entity_type(ct.get_tile_building_id(tile)) == EntityType.CORE and ct.get_team(ct.get_tile_building_id(tile)) != ct.get_team():
-                self.enemy_core_pos = tile     # Should be algorithm to get central position (use aarnavs search and symmetry stuff for this)
+                self.enemy_core_pos = ct.get_position(ct.get_tile_building_id(tile)) # Should be algorithm to get central position (use aarnavs search and symmetry stuff for this)
                 #ct.draw_indicator_dot(tile, 0, 0, 255)
             
             elif ((not self.closest_conn_to_core[1] and ct.get_entity_type(ct.get_tile_building_id(tile)) in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.SPLITTER] and ct.get_team(ct.get_tile_building_id(tile)) == ct.get_team()) or connected[0] in [EntityType.CORE, True]) and ct.get_position().distance_squared(tile) < ct.get_position().distance_squared(self.closest_conn_to_core[0]):
