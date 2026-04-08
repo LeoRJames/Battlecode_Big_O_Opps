@@ -1,6 +1,5 @@
 import random
 from queue import PriorityQueue
-
 from cambc import Controller, Direction, EntityType, Environment, Position
 
 # non-centre directions
@@ -27,7 +26,7 @@ class Player:
         self.pathfinder_start_pos = Position(1000, 1000)
         self.tit = []   # List of Positions of unmined titanium
         self.ax = []    # List of Positions of unmined axionite
-        self.built_harvester = [False, False]    # 0: True if built harvester and must connect; 1: Not False if built first conveyor and must move on to, otherwise stores position of that conveyor
+        self.built_harvester = [False, None]    # 0: True if built harvester and must connect; 1: Not False if built first conveyor and must move on to, otherwise stores position of that conveyor
         self.closest_conn_to_core = [Position(1000, 1000), False]   # True if do not adapt
         self.status = 0     # Tells bot what to do
         self.target = Position(1000, 1000)  # Target position for exploring
@@ -36,6 +35,7 @@ class Player:
         self.move_dir = Direction.CENTRE     # Arbitrary
         self.core_stored_resource = {}
         self.marker_location = Position(1000, 1000)
+        self.unreachable_ores = [] # List of unreachable ores
 
     def initialise_map(self, ct):   # Set up 2d array for each tile on map each storing a list of three info pieces (tile type, building, team)
         for j in range(ct.get_map_height()):
@@ -78,11 +78,11 @@ class Player:
             
             elif ((not self.closest_conn_to_core[1] and ct.get_entity_type(ct.get_tile_building_id(tile)) in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.SPLITTER] and ct.get_team(ct.get_tile_building_id(tile)) == ct.get_team()) or connected[0] in [EntityType.CORE, True]) and ct.get_position().distance_squared(tile) < ct.get_position().distance_squared(self.closest_conn_to_core[0]):
                 self.closest_conn_to_core[0] = tile
-            if ct.get_tile_env(tile) == Environment.ORE_TITANIUM and ct.get_entity_type(ct.get_tile_building_id(tile)) != EntityType.HARVESTER and tile not in self.tit:
+            if ct.get_tile_env(tile) == Environment.ORE_TITANIUM and ct.get_entity_type(ct.get_tile_building_id(tile)) != EntityType.HARVESTER and tile not in self.tit and tile not in self.unreachable_ores:
                 self.tit.append(tile)
             if tile in self.tit and (ct.get_entity_type(ct.get_tile_building_id(tile)) == EntityType.HARVESTER or (ct.get_team(ct.get_tile_building_id(tile)) != ct.get_team() and ct.get_entity_type(ct.get_tile_building_id(tile)) not in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.ROAD, EntityType.MARKER])) and (self.status != 2 or not self.built_harvester[0]):    # Remove from list if another bot has built harveter on it
                 self.tit.remove(tile)
-            if ct.get_tile_env(tile) == Environment.ORE_AXIONITE and ct.get_entity_type(ct.get_tile_building_id(tile)) != EntityType.HARVESTER and tile not in self.ax:
+            if ct.get_tile_env(tile) == Environment.ORE_AXIONITE and ct.get_entity_type(ct.get_tile_building_id(tile)) != EntityType.HARVESTER and tile not in self.ax and tile not in self.unreachable_ores:
                 self.ax.append(tile)
             if tile in self.ax and (ct.get_entity_type(ct.get_tile_building_id(tile)) == EntityType.HARVESTER or (ct.get_team(ct.get_tile_building_id(tile)) != ct.get_team() and ct.get_entity_type(ct.get_tile_building_id(tile)) not in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.ROAD, EntityType.MARKER, None])) and (self.status != 2 or not self.built_harvester[0]):
                 self.ax.remove(tile)
@@ -270,7 +270,7 @@ class Player:
                 if marker_value_id == ct.get_id(): # if marker is referring to this bot
                     if ct.can_move(ct.get_position().direction_to(i)):
                         ct.move(ct.get_position().direction_to(i))
-                    if ct.can_destroy(i):   # Destroy marker
+                    if ct.can_destroy(i) and marker_status != 10:   # Destroy marker
                         ct.destroy(i)
                     #else:
                         #ct.draw_indicator_line(i, ct.get_position(), 255, 0, 0)
@@ -343,7 +343,7 @@ class Player:
             else:
                 for i in range(len(path_explore)):
                     ct.draw_indicator_dot(path_explore[i], 0, 255, 255)
-                if len(path_explore[1]) > 1:    # If next to target but cannot move there as there is a builder bot this condition is not satisfied so will just wait
+                if len(path_explore) > 1:    # If next to target but cannot move there as there is a builder bot this condition is not satisfied so will just wait
                     if ct.can_build_road(path_explore[1]):  # Fails if trying to build on to core
                         ct.build_road(path_explore[1])
                     if ct.can_move(ct.get_position().direction_to(path_explore[1])):
@@ -371,19 +371,149 @@ class Player:
     
     def harvest_ore(self, ct, ore):
         if not self.built_harvester[0]:        # If have not built harvester, must move towards it and build
+            print(f"Going to build Harvester at {ore}")
 
-            came_from_move_harvester, cost_move_harvester, best_tile_unused_2 = self.pathfinder(ct, ore)    # Movement path from current location to ore
-            path_move_harvester = self.reconstruct_path(came_from_move_harvester, best_tile_unused_2)
-            if len(path_move_harvester) == 0:   # If another bot builds a harvester on ore on same turn then raises eror (should change in map to remove ores from list if it contains a harvester)
-                ct.draw_indicator_line(ct.get_position(), ore, 255, 0, 0)
-                ct.resign()
-            elif len(path_move_harvester) == 1 and self.map[ct.get_position().y][ct.get_position().x][2] == ct.get_team() and ct.get_position() == ore: # Happens to be on top of ore when switch to mine mode
+            # If far away from ore, just move towards it
+            if ore.distance_squared(ct.get_position()) >= 20:
+                print(f"Ore is out of vision range, so just moving towards it.")
+                self.target = ore
+                self.explore(ct, ore)
+                self.target = Position(1000, 1000)
+                return
+
+            # Happens to be on top of ore, move
+            if self.map[ct.get_position().y][ct.get_position().x][2] == ct.get_team() and ct.get_position() == ore:
+                print(f"Moving from on top of ore")
                 for d in DIRECTIONS:
                     if ct.can_build_road(ct.get_position().add(d)):
                         ct.build_road(ct.get_position().add(d))
                     if ct.can_move(d):
                         ct.move(d)
+                        break
 
+            # Checks if another bot has claimed the ore or there is a possible place to put conveyor next to harvester
+            can_build_harvester = False
+            if ct.get_entity_type(ct.get_tile_building_id(ore)) == EntityType.MARKER and ct.get_team(ct.get_tile_building_id(ore)) == ct.get_team():
+                marker_value = ct.get_marker_value(ct.get_tile_building_id(ore))
+                marker_value_id = (marker_value % (2 ** 28)) // (2 ** 12)
+                if marker_value_id == ct.get_id():
+                    print(f"Secured harvester target : {ore}")
+                    can_build_harvester = True
+            elif self.map[ore.y][ore.x][1] in [EntityType.ROAD, None] and self.map[ore.y][ore.x][2] in [ct.get_team(), None] :
+                for d in STRAIGHTS:
+                    check_location = ore.add(d)
+                    exists = True if 0 < check_location.x < ct.get_map_width() and 0 < check_location.y < ct.get_map_height() else False
+                    is_not_wall = True if self.map[check_location.y][check_location.x][0] != Environment.WALL else False
+                    if exists and is_not_wall and self.map[check_location.y][check_location.x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.ROAD, EntityType.BRIDGE, EntityType.SPLITTER, None] and self.map[check_location.y][check_location.x][2] in [ct.get_team(), None] :
+                        can_build_harvester = True
+                        self.built_harvester[1] = check_location
+
+            if not can_build_harvester:
+                print(f"Can not build Harvester at {ore}, removing from list.")
+                self.unreachable_ores.append(ore)
+                if ore in self.tit:
+                    self.tit.remove(ore)
+                elif ore in self.ax:
+                    self.ax.remove(ore)
+                else:
+                    print("ore is not in tit or ax!")
+                    ct.resign()
+                return
+
+            if ore.distance_squared(ct.get_position()) > 2:
+                print(f"Ore is out of action range ({ore})")
+                self.target = ore
+                self.explore(ct, ore)
+                self.target = Position(1000, 1000)
+                return
+
+            if ct.get_global_resources()[0] < ct.get_harvester_cost()[0] and ct.can_place_marker(ore):
+                print("Bagsying ORE")
+                marker_status = 10
+                bot_id = ct.get_id()
+                X, Y = 0, 0 # Not necessary information
+                message = (
+                        marker_status * (2 ** 28)
+                        + bot_id * (2 ** 12)
+                        + X * (2 ** 6)
+                        + Y)
+                ct.place_marker(ore, message)
+                return
+
+            elif ct.get_global_resources()[0] >= ct.get_harvester_cost()[0]:
+                if ct.can_destroy(ore) and self.map[ore.x][ore.y][1] not in [EntityType.HARVESTER, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR]:
+                    ct.destroy(ore)
+                if ct.can_build_harvester(ore):
+                    ct.build_harvester(ore)
+                    self.built_harvester[0] = True
+
+        else:
+            if self.built_harvester[1] is not None:
+                print(f"Going to {self.built_harvester[1]}")
+                if ct.get_position() != self.built_harvester[1]:
+                    self.target = self.built_harvester[1]
+                    self.explore(ct)
+                    return
+                self.built_harvester[1] = None
+
+            path_dict, cost, best_end_tile = self.pathfinder(ct, self.core_pos, bridge=True)
+            # Check if a path exists to core
+            if best_end_tile != self.core_pos:
+                # No path exists!
+                print("No path home exists!")
+                ct.resign()
+            path = self.reconstruct_path(path_dict, best_end_tile)
+            ct.draw_indicator_line(path[1], path[0], 0, 0, 0)
+
+            # Now find conveyor route to next best bridge location
+            path_dict, cost, best_end_tile = self.pathfinder(ct, path[1], path[0], conv=True)
+            print(f"Bridge cost: {ct.get_bridge_cost()}, Conveyor cost: {cost[best_end_tile] * ct.get_conveyor_cost()}")
+            if best_end_tile != path[1] or ct.get_bridge_cost()[0] < cost[best_end_tile] * ct.get_conveyor_cost()[0] :
+                print("Bridge Path is Better!")
+                if ct.can_destroy(path[0]):
+                    ct.destroy(path[0])
+                if ct.can_build_bridge(path[0], path[1]):
+                    ct.build_bridge(path[0], path[1])
+                    self.built_harvester[1] = path[1]
+                elif ct.get_bridge_cost()[0] > ct.get_global_resources()[0]:
+                    print("Waiting for money to build bridge")
+                    return
+            else:
+                print("conveyor is better")
+                path = self.reconstruct_path(path_dict, best_end_tile)
+                conveyor_dir = path[0].direction_to(path[1])
+                if ct.can_destroy(path[0]):
+                    ct.destroy(path[0])
+                if len(path) > 2 and self.map[path[1].y][path[1].x][1] == EntityType.CORE:
+                    for d in STRAIGHTS:
+                        if self.map[path[0].add(d).y][path[0].add(d).x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR]:
+                            direction = self.map[path[0].add(d).y][path[0].add(d).x][3][0]
+                            if ct.can_build_splitter(path[0],direction):
+                                ct.build_splitter(path[0], direction)
+                                print("Path Building Complete")
+                                self.built_harvester = [False, None]
+                                return
+                            elif ct.get_splitter_cost()[0] > ct.get_global_resources()[0]:
+                                print("Waiting for money to build splitter")
+                                return
+
+                if ct.can_build_conveyor(path[0], conveyor_dir):
+                    ct.build_conveyor(path[0], conveyor_dir)
+                    self.built_harvester[1] = path[1]
+                    return
+                elif ct.get_conveyor_cost()[0] > ct.get_global_resources()[0]:
+                    print("Waiting for money to build conveyor")
+                    return
+
+            if self.map[path[1].y][path[1].x][1] in [EntityType.CORE, EntityType.SPLITTER, EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR, EntityType.BRIDGE]:
+                print("Path Building Complete")
+                self.built_harvester = [False, None]
+
+            # Check if path exists to core
+
+
+
+            '''
             came_from_first_conv, cost_first_conv, best_tile_first_conv = self.pathfinder(ct, ore, conv=True) # Conveyor build path from current location to ore
             path_first_conv = self.reconstruct_path(came_from_first_conv, best_tile_first_conv)
             if len(path_first_conv) == 0:
@@ -526,7 +656,6 @@ class Player:
         else:
             if self.built_harvester[1] != False:    # If bridge built
                 if ct.get_position().distance_squared(self.built_harvester[1]) <= 2:    # If directly next to position it needs to move to
-                    self.explore_target = Position(1000, 1000)
                     came_from_built_harvester_core, cost_from_built_harvester_core, best_tile_built_harvester_core = self.pathfinder(ct, self.core_pos, self.built_harvester[1], conv=True)
                     came_from_built_harvester_conn, cost_from_built_harvester_conn, best_tile_built_harvester_conn = self.pathfinder(ct, self.closest_conn_to_core[0], self.built_harvester[1], conv=True)
                     if cost_from_built_harvester_core[best_tile_built_harvester_core] <= cost_from_built_harvester_conn[best_tile_built_harvester_conn]:   # Choose closest between core and stored closest cnveyor
@@ -601,7 +730,7 @@ class Player:
                     
                 else:
                     self.target = self.built_harvester[1]
-                    self.explore(ct)
+                    self.explore(ct, self.built_harvester[1])
             else:   # Connect harvester with conveyors
                 came_from_built_harvester_core, cost_from_built_harvester_core, best_tile_built_harvester_core = self.pathfinder(ct, self.core_pos, conv=True)
                 #if cost_from_built_harvester_core[best_tile_built_harvester_core] > 0 + ct.get_position().distance_squared(best_tile_built_harvester_core):   # Uses bridge if cost of a bridge path around obstacle is less than conveyor path (based on scaling factor)
@@ -710,9 +839,15 @@ class Player:
                         #if path_from_built_harvester[0].distance_squared(path_from_built_harvester[1]) > 1:
                             #self.built_harvester[1] = path_from_built_harvester[0]
                         #ct.resign()
+                        '''
 
     def run(self, ct: Controller) -> None:
+
+        if ct.get_current_round() > 500:
+            ct.resign()
+
         etype = ct.get_entity_type()
+
         if etype == EntityType.CORE:
             # Initialise map 2d array to map dimensions (ixj)
             if self.map == []:
@@ -905,13 +1040,13 @@ class Player:
                             if ct.get_direction(ct.get_tile_building_id(tile)) == tile.direction_to(self.target):
                                 dir = tile.direction_to(self.target)
                                 break
-                    
+
                     if dir == None:
                         if len(self.tit) > 0 or len(self.ax) > 0:
                             self.status = 2
                         else:
                             self.status = 1
-                    
+
                     else:
 
                         if ct.can_build_splitter(self.target, dir):
@@ -940,7 +1075,7 @@ class Player:
 
                             elif self.map[self.target.add(dir.rotate_left().rotate_left()).y][self.target.add(dir.rotate_left().rotate_left()).x][1] != EntityType.CORE and self.map[self.target.add(dir.rotate_left().rotate_left()).add(dir).y][self.target.add(dir.rotate_left().rotate_left()).add(dir).x][1] == EntityType.CORE:
                                 if self.map[self.target.add(dir.rotate_left().rotate_left()).y][self.target.add(dir.rotate_left().rotate_left()).x][1] != EntityType.FOUNDRY:
-                                    
+
                                     if ct.get_position().distance_squared(self.target.add(dir.rotate_left().rotate_left())) > 2:
                                         temp = self.target
                                         self.target = self.target.add(dir.rotate_left().rotate_left())
@@ -955,10 +1090,10 @@ class Player:
 
                                 elif self.map[self.target.add(dir.rotate_left()).y][self.target.add(dir.rotate_left()).x][1] == EntityType.FOUNDRY:
                                     pass    # build defences around harvester and splitter
-                            
+
                             elif self.map[self.target.add(dir.rotate_right().rotate_right()).y][self.target.add(dir.rotate_right().rotate_right()).x][1] != EntityType.CORE and self.map[self.target.add(dir.rotate_right().rotate_right()).add(dir).y][self.target.add(dir.rotate_right().rotate_right()).add(dir).x][1] == EntityType.CORE and self.map[self.target.add(dir.rotate_left().rotate_left()).y][self.target.add(dir.rotate_left().rotate_left()).x][1] != EntityType.FOUNDRY:
                                 if self.map[self.target.add(dir.rotate_right().rotate_right()).y][self.target.add(dir.rotate_right().rotate_right()).x][1] != EntityType.FOUNDRY:
-                                    
+
                                     if ct.get_position().distance_squared(self.target.add(dir.rotate_right().rotate_right())) > 2:
                                         temp = self.target
                                         self.target = self.target.add(dir.rotate_right().rotate_right())
@@ -970,7 +1105,7 @@ class Player:
                                         ct.destroy(self.target.add(dir.rotate_right().rotate_right()))
                                     if ct.can_build_foundry(self.target.add(dir.rotate_right().rotate_right())):
                                         ct.build_foundry(self.target.add(dir.rotate_right().rotate_right()))
-                                
+
                                 elif self.map[self.target.add(dir.rotate_right()).y][self.target.add(dir.rotate_right()).x][1] == EntityType.FOUNDRY:
                                     pass    # build defences around harvester and splitter
 
@@ -987,7 +1122,7 @@ class Player:
                                 self.target = temp
                         elif self.marker_location == Position(1000, 1000) and self.map[self.target.y][self.target.x][1] == EntityType.SPLITTER and (self.map[self.target.add(ct.get_direction(ct.get_tile_building_id(self.target))).y][self.target.add(ct.get_direction(ct.get_tile_building_id(self.target))).x][1] == EntityType.FOUNDRY or self.map[self.target.add(ct.get_direction(ct.get_tile_building_id(self.target)).rotate_left().rotate_left()).y][self.target.add(ct.get_direction(ct.get_tile_building_id(self.target)).rotate_left().rotate_left()).x][1] == EntityType.FOUNDRY or self.map[self.target.add(ct.get_direction(ct.get_tile_building_id(self.target)).rotate_right()).y][self.target.add(ct.get_direction(ct.get_tile_building_id(self.target)).rotate_right()).x][1] == EntityType.FOUNDRY):
                             self.target = Position(1000, 1000)
-                            
+
                     #else not enough money so wait
                 
                 if self.target == Position(1000, 1000) and self.marker_location == Position(1000, 1000):
