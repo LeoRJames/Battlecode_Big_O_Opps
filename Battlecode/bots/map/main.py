@@ -77,20 +77,21 @@ class Player:
             if tile in self.ax and (ct.get_entity_type(ct.get_tile_building_id(tile)) == EntityType.HARVESTER or (ct.get_team(ct.get_tile_building_id(tile)) != ct.get_team() and ct.get_entity_type(ct.get_tile_building_id(tile)) not in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.ROAD, EntityType.MARKER, None])) and (self.status != 2 or not self.built_harvester[0]):
                 self.ax.remove(tile)
 
-    def supply_connectivity(self, ct, start=None, check_back=True):  # ITERATIVE FOR EACH PATH
+    def supply_connectivity(self, ct, start=None, check_back=True, visited=False):  # ITERATIVE FOR EACH PATH
         if start is None:
             start = ct.get_position()
         # check_back: Flag to first check back to source, then check forward to end
         harvester_count = [0] # Counts how many harvesters on path (max four, more than this causes backlog)
         connected = [False]   # False if not connected; True if unknown (not recorded on map); otherwise entity type of what it connects to
         next_tile = start
-        visited = set()
+        if visited == False:
+            visited = set()
         while check_back:   # Checks back to source
             check_back = False
         while not check_back:   # Checks forward to end
 
             if next_tile in visited:
-                ckeck_back = True
+                check_back = True
                 break
             visited.add(next_tile)
 
@@ -121,15 +122,15 @@ class Player:
                 check_back = True
             elif self.map[next_tile.y][next_tile.x][1] is EntityType.SPLITTER:  # Assume splitter direction is same direction of conveyor into it
                 connected[0] = EntityType.SPLITTER
-                left_splitter_harvester_count, left_splitter_connected = self.supply_connectivity(ct, next_tile.add(self.map[next_tile.y][next_tile.x][3][0].rotate_left().rotate_left()), check_back)
+                left_splitter_harvester_count, left_splitter_connected = self.supply_connectivity(ct, next_tile.add(self.map[next_tile.y][next_tile.x][3][0].rotate_left().rotate_left()), check_back, visited=visited)
                 for i in range(len(left_splitter_harvester_count)):
                     harvester_count.append(left_splitter_harvester_count[i])
                     connected.append(left_splitter_connected[i])
-                forward_splitter_harvester_count, forward_splitter_connected = self.supply_connectivity(ct, next_tile.add(self.map[next_tile.y][next_tile.x][3][0]), check_back)
+                forward_splitter_harvester_count, forward_splitter_connected = self.supply_connectivity(ct, next_tile.add(self.map[next_tile.y][next_tile.x][3][0]), check_back, visited=visited)
                 for i in range(len(forward_splitter_harvester_count)):
                     harvester_count.append(forward_splitter_harvester_count[i])
                     connected.append(forward_splitter_connected[i])
-                right_splitter_harvester_count, right_splitter_connected = self.supply_connectivity(ct, next_tile.add(self.map[next_tile.y][next_tile.x][3][0].rotate_right().rotate_right()), check_back)
+                right_splitter_harvester_count, right_splitter_connected = self.supply_connectivity(ct, next_tile.add(self.map[next_tile.y][next_tile.x][3][0].rotate_right().rotate_right()), check_back, visited=visited)
                 for i in range(len(right_splitter_harvester_count)):
                     harvester_count.append(right_splitter_harvester_count[i])
                     connected.append(right_splitter_connected[i])
