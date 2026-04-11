@@ -81,7 +81,7 @@ class Player:
                 elif entity == EntityType.MARKER:
                     self.marker_location = tile
 
-                elif self.enemy_core_pos != Position(1000, 1000) and entity == EntityType.CORE and team != my_team:
+                elif self.enemy_core_pos == Position(1000, 1000) and entity == EntityType.CORE and team != my_team:
                     self.enemy_core_pos = ct.get_position(building_id)
                 else:
                     self.map[tile.y][tile.x][3][0] = None
@@ -196,7 +196,7 @@ class Player:
     def heuristic_squaredEuclidean(self, next, target):
         return next.distance_squared(target)
 
-    def pathfinder(self, ct, target, start=None, bridge=False, conv=False, avoid=False):       # Pass Position
+    def pathfinder(self, ct, target, start=None, bridge=False, conv=False, avoid=False, any=False):       # Pass Position
         pre_path_finder_time = ct.get_cpu_time_elapsed()
         if start == None:
             start = ct.get_position()
@@ -545,6 +545,49 @@ class Player:
 
             # Check if path exists to core
 
+    def find_enemy_core(self, ct):
+        ct.draw_indicator_dot(ct.get_position(), 0, 0, 255)
+        if self.enemy_core_pos == Position(1000, 1000) and self.target != Position(1000, 1000) and self.map[self.target.y][self.target.x][0] == 0:
+            self.explore(ct, self.target)
+            ct.draw_indicator_line(ct.get_position(), self.target, 255, 255, 255)
+            #ct.draw_indicator_dot(ct.get_position(), 255, 255, 255)
+            if self.enemy_core_pos != Position(1000, 1000):
+                self.explore_target = Position(1000, 1000)
+                self.explore_left = True
+        elif self.enemy_core_pos != Position(1000, 1000):  # Report enemy core position back to core
+            self.status = REPORT_ENEMY_CORE_LOCATION
+        elif len(self.tit) != 0 or len(self.ax) != 0:    # Mine for ore
+            self.status = MINING_TITANIUM
+            self.target = Position(1000, 1000)
+        else:   # Explore from outside corner in
+            self.status = EXPLORING
+
+    def exploring_the_map(self, ct):
+        CORNERS = [Position(0, 0), Position(ct.get_map_width()-1, 0), Position(0, ct.get_map_height()-1), Position(ct.get_map_width()-1, ct.get_map_height()-1)]
+        closest_corner = Position(1000, 1000)
+        iteration = 0
+        while closest_corner == Position(1000, 1000) and iteration < (Position(0, 0).distance_squared(Position(int(ct.get_map_width()/2), int(ct.get_map_height()/2))))/7: # Ends if new position to explore is found or is at centre
+            for corner in CORNERS:
+                for i in range(7*iteration):
+                    corner = corner.add(Direction.CENTRE)
+                    if corner == Position(int(ct.get_map_width()/2), int(ct.get_map_height()/2)):
+                        break
+                if self.map[corner.y][corner.x] == [0, 0, 0, [0], 0] and ct.get_position().distance_squared(corner) < ct.get_position().distance_squared(closest_corner):
+                    closest_corner = corner
+            iteration += 1
+        if closest_corner == Position(1000, 1000):
+            self.status = DEFENCE # Switch to defence for now
+        else:   # Explore to chosen corner
+            self.target = closest_corner
+            self.explore(ct)
+            if closest_corner in ct.get_nearby_tiles():
+                self.explore_target = Position(1000, 1000)
+                self.explore_left = True
+        # Find closest corner, move until it is in vision radius (covered by first if)
+        ct.draw_indicator_dot(self.target, 255, 0, 0)
+
+    def report_enemy_core_location(self, ct):
+        pass
 
     def run(self, ct: Controller) -> None:
 
@@ -660,14 +703,26 @@ class Player:
 
             elif self.status == MINING_TITANIUM:  # Mining ore
                 print("Dont mind me, I'm just mining some titanium.")
-                self.mining_titanium(ct)
+                if len(self.tit) != 0:
+                    closest_tit = Position(1000, 1000)
+                    for i in range(len(self.tit)):
+                        if self.tit[i].distance_squared(ct.get_position()) < closest_tit.distance_squared(ct.get_position()):
+                            closest_tit = self.tit[i]
+                    self.harvest_ore(ct, closest_tit)   # Make smarter selection cases
+                    ct.draw_indicator_line(ct.get_position(), closest_tit, 0, 255, 0)
+                elif len(self.ax) != 0:
+                    closest_ax = Position(1000, 1000)
+                    for j in range(len(self.ax)):
+                        if self.ax[j].distance_squared(ct.get_position()) < closest_ax.distance_squared(ct.get_position()):
+                            closest_ax = self.ax[j]
+                    self.harvest_ore(ct, closest_ax)
+                    ct.draw_indicator_line(ct.get_position(), closest_ax, 0, 255, 0)
+                else:
+                    self.status = EXPLORING
+                #self.mining_titanium(ct)
 
-            elif self.status == 3:  # Defence algorithm
+            elif self.status == DEFENCE:  # Defence algorithm
                 ct.draw_indicator_dot(ct.get_position(), 255, 0, 0)
-                pass
-
-            elif self.status == 4:  # Report enemy core position back to core
-                ct.draw_indicator_dot(ct.get_position(), 255, 0, 255)
                 pass
 
             # IDK about whats below here...
