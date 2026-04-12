@@ -1,5 +1,6 @@
 import random
 from queue import PriorityQueue
+from collections import deque
 from cambc import Controller, Direction, EntityType, Environment, Position
 
 # non-centre directions
@@ -369,6 +370,7 @@ class Player:
         path_explore = self.reconstruct_path(came_from_explore, target)
         if len(path_explore) == 0:
             print("Invalid tile")
+            self.find_invalid_tiles(ct, target)
         else:
             for i in range(len(path_explore)):
                 ct.draw_indicator_dot(path_explore[i], 0, 255, 255)
@@ -545,6 +547,119 @@ class Player:
 
             # Check if path exists to core
 
+    
+    def pad_map(self):  # Must account for loops that run along edge of map so pad map with wall on outside
+
+        h = len(self.map)
+        w = len(self.map[0])
+
+        padded = [[[Environment.WALL]] * (w + 2)]
+        for row in self.map:
+            padded.append([[Environment.WALL]] + row + [[Environment.WALL]])
+        padded.append([[Environment.WALL]] * (w + 2))
+
+        return padded
+    
+    def smallest_wall_loop(self, target=None):
+
+        if target == None:
+            target = self.target
+
+        DIRS = [(1,0), (-1,0), (0,1), (0,-1)]
+
+        grid = self.pad_map()
+
+        h = len(grid)
+        w = len(grid[0])
+
+        target_y = target.y + 1     # + 1 is Padded grid offset
+        target_x = target.x + 1
+
+        if grid[target_y][target_x][0] != Environment.WALL:
+            print(target_x, target_y)
+            return None
+
+        best_loop = None
+
+        for dx, dy in DIRS:
+            nx, ny = target_x + dx, target_y + dy
+
+            if not (0 <= nx < w and 0 <= ny < h):
+                continue
+
+            if grid[ny][nx][0] != Environment.WALL:
+                continue
+
+            queue = deque()
+            queue.append((nx, ny, [(target_x, target_y), (nx, ny)]))
+            visited = {(target_x, target_y), (nx, ny)}
+
+            while queue:
+                x, y, path = queue.popleft()
+
+                for ddx, ddy in DIRS:
+                    xx, yy = x + ddx, y + ddy
+
+                    if not (0 <= xx < w and 0 <= yy < h):
+                        continue
+
+                    if (xx, yy) == (target_x, target_y) and len(path) >= 4:
+                        loop = path + [(target_x, target_y)]
+                        if best_loop is None or len(loop) < len(best_loop):
+                            best_loop = loop
+                        continue
+
+                    if (xx, yy) in visited:
+                        continue
+                    
+                    if grid[yy][xx][0] != Environment.WALL:
+                        continue
+
+                    visited.add((xx, yy))
+                    queue.append((xx, yy, path + [(xx, yy)]))
+
+        if best_loop:
+            # remove padding offset
+            return [(x-1, y-1) for x, y in best_loop]
+
+        return None
+
+    def find_invalid_tiles(self, ct, target=None):
+        if target == None:
+            target = self.target
+
+        wall_tile_y = target.y
+        wall_tile_x = target.x
+        while wall_tile_y >= 0 and self.map[wall_tile_y][wall_tile_x][0] != Environment.WALL:    # Check up/north to wall or edge of map
+            wall_tile_y -= 1
+        if self.map[wall_tile_y][wall_tile_x][0] != Environment.WALL:
+            wall_tile_y = target.y
+            wall_tile_x = target.x
+            while wall_tile_y < len(self.map) and self.map[wall_tile_y][wall_tile_x][0] != Environment.WALL:    # Check down/south to wall or edge of map
+                wall_tile_y += 1
+            if self.map[wall_tile_y][wall_tile_x][0] != Environment.WALL:
+                wall_tile_y = target.y
+                wall_tile_x = target.x
+                while wall_tile_x <= 0 and self.map[wall_tile_y][wall_tile_x][0] != Environment.WALL:    # Check left/west to wall or edge of map
+                    wall_tile_x -= 1
+                if self.map[wall_tile_y][wall_tile_x][0] != Environment.WALL:
+                    wall_tile_y = target.y
+                    wall_tile_x = target.x
+                    while wall_tile_x < len(self.map[0]) and self.map[wall_tile_y][wall_tile_x][0] != Environment.WALL:    # Check right/east to wall or edge of map
+                        wall_tile_x += 1
+                    if self.map[wall_tile_y][wall_tile_x][0] != Environment.WALL:
+                        print("trapped in small box. Some obscure map this is.")
+                        return
+                    
+        #ct.draw_indicator_dot(Position(wall_tile_x, wall_tile_y), 0, 255, 0)
+        wall_loop = self.smallest_wall_loop(Position(wall_tile_x, wall_tile_y))
+        if wall_loop == None:
+            print("No loop")
+        else:
+            print(wall_loop)
+            for tile in wall_loop:
+                ct.draw_indicator_dot(Position(tile[0], tile[1]), 255, 0, 0)
+
     def find_enemy_core(self, ct):
         ct.draw_indicator_dot(ct.get_position(), 0, 0, 255)
         if self.enemy_core_pos == Position(1000, 1000) and self.target != Position(1000, 1000) and self.map[self.target.y][self.target.x][0] == 0:
@@ -678,6 +793,9 @@ class Player:
                             ct.place_marker(i, message)'''
                     
         elif etype == EntityType.BUILDER_BOT:
+
+            if ct.get_current_round() >= 200:
+                ct.resign()
 
             # Update map and print update timings
             pre_update_map_time = ct.get_cpu_time_elapsed()
