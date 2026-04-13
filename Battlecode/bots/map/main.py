@@ -2,6 +2,7 @@ import random
 from queue import PriorityQueue
 from collections import deque
 from cambc import Controller, Direction, EntityType, Environment, Position
+import heapq
 
 # non-centre directions
 DIRECTIONS = [d for d in Direction if d != Direction.CENTRE]
@@ -196,7 +197,112 @@ class Player:
     def heuristic_squaredEuclidean(self, next, target):
         return next.distance_squared(target)
 
-    def pathfinder(self, ct, target, start=None, bridge=False, conv=False, avoid=False, any=False):       # Pass Position
+    def pathfinder(self, ct, target, start=None,
+                bridge=False, conv=False, avoid=False, any=False):
+
+        start_time = ct.get_cpu_time_elapsed()
+
+        if start is None:
+            start = ct.get_position()
+
+        # Convert to tuples for internal use
+        start = (start.x, start.y)
+        target = (target.x, target.y)
+
+        grid = self.map
+        height = len(grid)
+        width = len(grid[0])
+        unreachable = self.unreachable_tiles
+
+        # Open set (priority queue)
+        open_heap = []
+        heapq.heappush(open_heap, (0, 0, start))
+
+        # A* bookkeeping
+        came_from = {start: None}
+        cost_so_far = {start: 0}
+        closed = set()
+
+        best_tile = start
+        best_dist = (
+            self.heuristic_squaredEuclidean(Position(*start), Position(*target))
+            if bridge else
+            self.heuristic_Chebyshev(Position(*start), Position(*target))
+        )
+
+        # Choose heuristic once
+        if bridge:
+            heuristic = lambda p: self.heuristic_squaredEuclidean(
+                Position(*p), Position(*target)
+            )
+        elif conv:
+            heuristic = lambda p: self.heuristic_Chebyshev(
+                Position(*p), Position(*target)
+            )
+        else:
+            heuristic = lambda p: abs(p[0] - target[0]) + abs(p[1] - target[1])
+
+        # Neighbor offsets
+        if conv:
+            neighbor_offsets = [(-1,0),(1,0),(0,-1),(0,1)]
+        else:
+            neighbor_offsets = [
+                (-1,-1),(0,-1),(1,-1),
+                (-1, 0),        (1, 0),
+                (-1, 1),(0, 1),(1, 1)
+            ]
+
+        counter = 0
+
+        while open_heap:
+            _, _, current = heapq.heappop(open_heap)
+
+            if current in closed:
+                continue
+            closed.add(current)
+            counter += 1
+
+            cx, cy = current
+
+            # Goal check
+            if current == target:
+                best_tile = current
+                break
+
+            # Best reachable update
+            d = heuristic(current)
+            if d < best_dist:
+                best_dist = d
+                best_tile = current
+
+            for dx, dy in neighbor_offsets:
+                nx, ny = cx + dx, cy + dy
+
+                if not (0 <= nx < width and 0 <= ny < height):
+                    continue
+                if (nx, ny) in unreachable or (nx, ny) in closed:
+                    continue
+                if grid[ny][nx][0] == Environment.WALL:
+                    continue
+
+                new_cost = cost_so_far[current] + 1
+
+                if (nx, ny) not in cost_so_far or new_cost < cost_so_far[(nx, ny)]:
+                    cost_so_far[(nx, ny)] = new_cost
+                    priority = new_cost + heuristic((nx, ny))
+                    heapq.heappush(open_heap, (priority, counter, (nx, ny)))
+                    came_from[(nx, ny)] = current
+
+        # Convert best_tile back to Position
+        best_tile = Position(*best_tile)
+
+        end_time = ct.get_cpu_time_elapsed()
+        print(f"Path Finder Time: {end_time - start_time}, ({counter})")
+
+        return came_from, cost_so_far, best_tile
+
+
+    '''def pathfinder(self, ct, target, start=None, bridge=False, conv=False, avoid=False, any=False):       # Pass Position
         pre_path_finder_time = ct.get_cpu_time_elapsed()
         if start == None:
             start = ct.get_position()
@@ -308,7 +414,7 @@ class Player:
         post_path_finder_time = ct.get_cpu_time_elapsed()
         print(f" Path Finder Time: {post_path_finder_time - pre_path_finder_time}, ({counter})")
         print(f"Current Time: {post_path_finder_time}")
-        return came_from, cost_so_far, best_tile
+        return came_from, cost_so_far, best_tile'''
     
     def reconstruct_path(self, came_from, goal):
         if goal not in came_from:
