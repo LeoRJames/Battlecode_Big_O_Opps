@@ -34,12 +34,11 @@ class Player:
         self.status = 0     # Tells bot what to do
         self.target = Position(1000, 1000)  # Target position for exploring
         self.transport_resource_var = False
-        self.explore_target = Position(1000, 1000)
         self.move_dir = Direction.CENTRE     # Arbitrary
         self.core_stored_resource = {}
         self.marker_location = Position(1000, 1000)
         self.unreachable_ores = [] # List of unreachable ores
-        self.explore_left = True
+        self.unreachable_tiles = []
 
     def initialise_map(self, ct):   # Set up 2d array for each tile on map each storing a list of three info pieces (tile type, building, team)
         for j in range(ct.get_map_height()):
@@ -241,38 +240,38 @@ class Player:
                 if avoid:
                     for i in range(7):
                         for j in range(7):
-                            if (not (i == 3 and j == 3)) and ((((i-3)**2)+((j-3)**2)) <= 9) and current[3].x + (i-3) >= 0 and current[3].x + (i-3) < len(self.map[0]) and current[3].y + (j-3) >= 0 and current[3].y + (j-3) < len(self.map) and (((self.map[current[3].y + (j-3)][current[3].x + (i-3)][1] in [EntityType.MARKER, EntityType.ROAD, EntityType.CORE, EntityType.SPLITTER] and self.map[current[3].y + (j-3)][current[3].x + (i-3)][2] == ct.get_team()) or (self.map[current[3].y + (j-3)][current[3].x + (i-3)][1] == None and self.map[current[3].y + (j-3)][current[3].x + (i-3)][0] in [Environment.EMPTY]))):  # (not (self.map[current[3].y + (j-3)][current[3].x + (i-3)][4] in [EntityType.BUILDER_BOT] and ct.get_position().distance_squared(current[3]) <= 9)) and 
+                            if (not (i == 3 and j == 3)) and ((((i-3)**2)+((j-3)**2)) <= 9) and current[3].x + (i-3) >= 0 and current[3].x + (i-3) < len(self.map[0]) and current[3].y + (j-3) >= 0 and current[3].y + (j-3) < len(self.map) and (current[3] not in self.unreachable_tiles) and ((self.map[current[3].y + (j-3)][current[3].x + (i-3)][1] in [EntityType.MARKER, EntityType.ROAD, EntityType.CORE, EntityType.SPLITTER] and self.map[current[3].y + (j-3)][current[3].x + (i-3)][2] == ct.get_team()) or (self.map[current[3].y + (j-3)][current[3].x + (i-3)][1] == None and self.map[current[3].y + (j-3)][current[3].x + (i-3)][0] in [Environment.EMPTY])) and (self.map[current[3].y + (j-3)][current[3].x + (i-3)][4] is None):  # (not (self.map[current[3].y + (j-3)][current[3].x + (i-3)][4] in [EntityType.BUILDER_BOT] and ct.get_position().distance_squared(current[3]) <= 9)) and 
                                 check_tiles.append((current[3].x + (i-3), current[3].y + (j-3)))
                                 #ct.draw_indicator_dot(Position(current[3].x + (i-3), current[3].y + (j-3)), 255, 0, 0)
                 else:
                     for i in range(7):
                         for j in range(7):
-                            if (not (i == 3 and j == 3)) and ((((i-3)**2)+((j-3)**2)) <= 9) and current[3].x + (i-3) >= 0 and current[3].x + (i-3) < len(self.map[0]) and current[3].y + (j-3) >= 0 and current[3].y + (j-3) < len(self.map) and (((self.map[current[3].y + (j-3)][current[3].x + (i-3)][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.MARKER, EntityType.ROAD, EntityType.CORE, EntityType.SPLITTER] and self.map[current[3].y + (j-3)][current[3].x + (i-3)][2] == ct.get_team()) or (self.map[current[3].y + (j-3)][current[3].x + (i-3)][1] == None and self.map[current[3].y + (j-3)][current[3].x + (i-3)][0] in [Environment.EMPTY]))):  # (not (self.map[current[3].y + (j-3)][current[3].x + (i-3)][4] in [EntityType.BUILDER_BOT] and ct.get_position().distance_squared(current[3]) <= 9)) and 
+                            if (not (i == 3 and j == 3)) and ((((i-3)**2)+((j-3)**2)) <= 9) and current[3].x + (i-3) >= 0 and current[3].x + (i-3) < len(self.map[0]) and current[3].y + (j-3) >= 0 and current[3].y + (j-3) < len(self.map) and (current[3] not in self.unreachable_tiles) and ((self.map[current[3].y + (j-3)][current[3].x + (i-3)][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.MARKER, EntityType.ROAD, EntityType.CORE, EntityType.SPLITTER] and self.map[current[3].y + (j-3)][current[3].x + (i-3)][2] == ct.get_team()) or (self.map[current[3].y + (j-3)][current[3].x + (i-3)][1] == None and self.map[current[3].y + (j-3)][current[3].x + (i-3)][0] in [Environment.EMPTY])) and (self.map[current[3].y + (j-3)][current[3].x + (i-3)][4] is None):  # (not (self.map[current[3].y + (j-3)][current[3].x + (i-3)][4] in [EntityType.BUILDER_BOT] and ct.get_position().distance_squared(current[3]) <= 9)) and 
                                 check_tiles.append((current[3].x + (i-3), current[3].y + (j-3)))
                                 #ct.draw_indicator_dot(Position(current[3].x + (i-3), current[3].y + (j-3)), 255, 0, 0)
             elif conv:      # If conveyor, consider only straight surrounding tiles
                 if avoid:
                     for i in range(3):
                         for j in range(3):
-                            if (not (abs(i-1) == abs(j-1))) and current[3].x + (i-1) >= 0 and current[3].x + (i-1) < len(self.map[0]) and current[3].y + (j-1) >= 0 and current[3].y + (j-1) < len(self.map) and (((self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] in [EntityType.MARKER, EntityType.ROAD, EntityType.CORE, EntityType.SPLITTER] and self.map[current[3].y + (j-1)][current[3].x + (i-1)][2] == ct.get_team()) or (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] == None and self.map[current[3].y + (j-1)][current[3].x + (i-1)][0] in [Environment.EMPTY]))):  # (not (self.map[current[3].y + (j-1)][current[3].x + (i-1)][4] in [EntityType.BUILDER_BOT] and ct.get_position().distance_squared(current[3]) <= 1) and
+                            if (not (abs(i-1) == abs(j-1))) and current[3].x + (i-1) >= 0 and current[3].x + (i-1) < len(self.map[0]) and current[3].y + (j-1) >= 0 and current[3].y + (j-1) < len(self.map) and (current[3] not in self.unreachable_tiles) and ((self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] in [EntityType.MARKER, EntityType.ROAD, EntityType.CORE, EntityType.SPLITTER] and self.map[current[3].y + (j-1)][current[3].x + (i-1)][2] == ct.get_team()) or (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] == None and self.map[current[3].y + (j-1)][current[3].x + (i-1)][0] in [Environment.EMPTY])) and (self.map[current[3].y + (j-1)][current[3].x + (i-1)][4] is None):  # (not (self.map[current[3].y + (j-1)][current[3].x + (i-1)][4] in [EntityType.BUILDER_BOT] and ct.get_position().distance_squared(current[3]) <= 1) and
                                 check_tiles.append((current[3].x + (i-1), current[3].y + (j-1)))
                                 #ct.draw_indicator_dot(Position(current[3].x + (i-1), current[3].y + (j-1)), 0, 255, 0)
                 else:
                     for i in range(3):
                         for j in range(3):
-                            if (not (abs(i-1) == abs(j-1))) and current[3].x + (i-1) >= 0 and current[3].x + (i-1) < len(self.map[0]) and current[3].y + (j-1) >= 0 and current[3].y + (j-1) < len(self.map) and (((self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.MARKER, EntityType.ROAD, EntityType.CORE, EntityType.SPLITTER] and self.map[current[3].y + (j-1)][current[3].x + (i-1)][2] == ct.get_team()) or (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] == None and self.map[current[3].y + (j-1)][current[3].x + (i-1)][0] in [Environment.EMPTY]))):  # (not (self.map[current[3].y + (j-1)][current[3].x + (i-1)][4] in [EntityType.BUILDER_BOT] and ct.get_position().distance_squared(current[3]) <= 1) and
+                            if (not (abs(i-1) == abs(j-1))) and current[3].x + (i-1) >= 0 and current[3].x + (i-1) < len(self.map[0]) and current[3].y + (j-1) >= 0 and current[3].y + (j-1) < len(self.map) and (current[3] not in self.unreachable_tiles) and ((self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.MARKER, EntityType.ROAD, EntityType.CORE, EntityType.SPLITTER] and self.map[current[3].y + (j-1)][current[3].x + (i-1)][2] == ct.get_team()) or (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] == None and self.map[current[3].y + (j-1)][current[3].x + (i-1)][0] in [Environment.EMPTY])) and (self.map[current[3].y + (j-1)][current[3].x + (i-1)][4] is None):  # (not (self.map[current[3].y + (j-1)][current[3].x + (i-1)][4] in [EntityType.BUILDER_BOT] and ct.get_position().distance_squared(current[3]) <= 1) and
                                 check_tiles.append((current[3].x + (i-1), current[3].y + (j-1)))
                                 #ct.draw_indicator_dot(Position(current[3].x + (i-1), current[3].y + (j-1)), 0, 255, 0)
             elif any:
                 for i in range(3):
                     for j in range(3):
-                        if (not (i == 1 and j == 1)) and current[3].x + (i-1) >= 0 and current[3].x + (i-1) < len(self.map[0]) and current[3].y + (j-1) >= 0 and current[3].y + (j-1) < len(self.map) and (((not (self.map[current[3].y + (j-1)][current[3].x + (i-1)][4] in [EntityType.BUILDER_BOT] and ct.get_position().distance_squared(current[3]) <= 2)) and (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.MARKER, EntityType.ROAD, EntityType.SPLITTER] or (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] == EntityType.CORE and self.map[current[3].y + (j-1)][current[3].x + (i-1)][2] == ct.get_team()) or (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] == None and self.map[current[3].y + (j-1)][current[3].x + (i-1)][0] != Environment.WALL))) or self.map[current[3].y + (j-1)][current[3].x + (i-1)][0] == 0):
+                        if (not (i == 1 and j == 1)) and current[3].x + (i-1) >= 0 and current[3].x + (i-1) < len(self.map[0]) and current[3].y + (j-1) >= 0 and current[3].y + (j-1) < len(self.map) and (current[3] not in self.unreachable_tiles) and (((not (self.map[current[3].y + (j-1)][current[3].x + (i-1)][4] in [EntityType.BUILDER_BOT] and ct.get_position().distance_squared(current[3]) <= 2)) and (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.MARKER, EntityType.ROAD, EntityType.SPLITTER] or (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] == EntityType.CORE and self.map[current[3].y + (j-1)][current[3].x + (i-1)][2] == ct.get_team()) or (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] == None and self.map[current[3].y + (j-1)][current[3].x + (i-1)][0] != Environment.WALL))) or self.map[current[3].y + (j-1)][current[3].x + (i-1)][0] == 0):
                             check_tiles.append((current[3].x + (i-1), current[3].y + (j-1)))
             
             else:           # If normal one square movement, consider all surrounding tiles from current position
                 for i in range(3):
                     for j in range(3):
-                        if (not (i == 1 and j == 1)) and current[3].x + (i-1) >= 0 and current[3].x + (i-1) < len(self.map[0]) and current[3].y + (j-1) >= 0 and current[3].y + (j-1) < len(self.map) and ((not (self.map[current[3].y + (j-1)][current[3].x + (i-1)][4] in [EntityType.BUILDER_BOT] and ct.get_position().distance_squared(current[3]) <= 2)) and (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.MARKER, EntityType.ROAD, EntityType.SPLITTER] or (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] == EntityType.CORE and self.map[current[3].y + (j-1)][current[3].x + (i-1)][2] == ct.get_team()) or (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] == None and self.map[current[3].y + (j-1)][current[3].x + (i-1)][0] != Environment.WALL))):
+                        if (not (i == 1 and j == 1)) and current[3].x + (i-1) >= 0 and current[3].x + (i-1) < len(self.map[0]) and current[3].y + (j-1) >= 0 and current[3].y + (j-1) < len(self.map) and (current[3] not in self.unreachable_tiles) and ((not (self.map[current[3].y + (j-1)][current[3].x + (i-1)][4] in [EntityType.BUILDER_BOT] and ct.get_position().distance_squared(current[3]) <= 2)) and (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.MARKER, EntityType.ROAD, EntityType.SPLITTER] or (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] == EntityType.CORE and self.map[current[3].y + (j-1)][current[3].x + (i-1)][2] == ct.get_team()) or (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] == None and self.map[current[3].y + (j-1)][current[3].x + (i-1)][0] != Environment.WALL))):
                             check_tiles.append((current[3].x + (i-1), current[3].y + (j-1)))
                             #ct.draw_indicator_dot(Position(current[3].x + (i-1), current[3].y + (j-1)), 0, 0, 255)
             for tile in check_tiles:
@@ -371,6 +370,9 @@ class Player:
         if len(path_explore) == 0:
             print("Invalid tile")
             self.find_invalid_tiles(ct, target)
+            if self.built_harvester[1] != None:
+                ct.draw_indicator_dot(self.built_harvester[1], 0, 0, 255)
+                self.built_harvester[1] = self.map[self.built_harvester[1].y][self.built_harvester[1].x][3][1]
         else:
             for i in range(len(path_explore)):
                 ct.draw_indicator_dot(path_explore[i], 0, 255, 255)
@@ -406,9 +408,6 @@ class Player:
                 self.target = ore
                 self.explore(ct, ore)
                 self.target = Position(1000, 1000)
-                if ore.distance_squared(ct.get_position()) < 20:
-                    self.explore_left = True
-                    self.explore_target = Position(1000, 1000)
                 return
 
             # Happens to be on top of ore, move
@@ -455,9 +454,6 @@ class Player:
                 self.target = ore
                 self.explore(ct, ore)
                 self.target = Position(1000, 1000)
-                if ore.distance_squared(ct.get_position()) <= 2:
-                    self.explore_left = True
-                    self.explore_target = Position(1000, 1000)
                 return
 
             if ct.get_global_resources()[0] < ct.get_harvester_cost()[0] and ct.can_place_marker(ore):
@@ -486,9 +482,6 @@ class Player:
                 if ct.get_position() != self.built_harvester[1]:
                     self.target = self.built_harvester[1]
                     self.explore(ct)
-                    if ct.get_position() == self.built_harvester[1]:
-                        self.explore_left = True
-                        self.explore_target = Position(1000, 1000)
                     return
                 self.built_harvester[1] = None
 
@@ -547,7 +540,6 @@ class Player:
 
             # Check if path exists to core
 
-    
     def pad_map(self):  # Must account for loops that run along edge of map so pad map with wall on outside
 
         h = len(self.map)
@@ -623,6 +615,52 @@ class Player:
             return [(x-1, y-1) for x, y in best_loop]
 
         return None
+    
+    def cells_inside_loop(self, loop):
+        # Convert loop to set for O(1) lookup
+        wall = set(loop)
+
+        xs = [x for x, _ in loop]
+        ys = [y for _, y in loop]
+
+        min_x, max_x = min(xs) - 1, max(xs) + 1
+        min_y, max_y = min(ys) - 1, max(ys) + 1
+
+        width = max_x - min_x + 1
+        height = max_y - min_y + 1
+
+        # Track visited cells
+        visited = set()
+
+        # Flood fill starting from outside corner
+        start = (min_x, min_y)
+        queue = deque([start])
+        visited.add(start)
+
+        while queue:
+            x, y = queue.popleft()
+
+            for dx, dy in [(-1,0), (1,0), (0,-1), (0,1)]:
+                nx, ny = x + dx, y + dy
+
+                if nx < min_x or nx > max_x or ny < min_y or ny > max_y:
+                    continue
+                if (nx, ny) in visited:
+                    continue
+                if (nx, ny) in wall:
+                    continue
+
+                visited.add((nx, ny))
+                queue.append((nx, ny))
+
+        # Any cell that wasn't visited and isn't a wall is inside
+        inside = []
+        for y in range(min_y + 1, max_y):
+            for x in range(min_x + 1, max_x):
+                if (x, y) not in visited and (x, y) not in wall:
+                    inside.append((x, y))
+
+        return inside
 
     def find_invalid_tiles(self, ct, target=None):
         if target == None:
@@ -630,22 +668,22 @@ class Player:
 
         wall_tile_y = target.y
         wall_tile_x = target.x
-        while wall_tile_y >= 0 and self.map[wall_tile_y][wall_tile_x][0] != Environment.WALL:    # Check up/north to wall or edge of map
+        while wall_tile_y > 0 and self.map[wall_tile_y][wall_tile_x][0] != Environment.WALL:    # Check up/north to wall or edge of map
             wall_tile_y -= 1
         if self.map[wall_tile_y][wall_tile_x][0] != Environment.WALL:
             wall_tile_y = target.y
             wall_tile_x = target.x
-            while wall_tile_y < len(self.map) and self.map[wall_tile_y][wall_tile_x][0] != Environment.WALL:    # Check down/south to wall or edge of map
+            while wall_tile_y < (len(self.map) - 1) and self.map[wall_tile_y][wall_tile_x][0] != Environment.WALL:    # Check down/south to wall or edge of map
                 wall_tile_y += 1
             if self.map[wall_tile_y][wall_tile_x][0] != Environment.WALL:
                 wall_tile_y = target.y
                 wall_tile_x = target.x
-                while wall_tile_x <= 0 and self.map[wall_tile_y][wall_tile_x][0] != Environment.WALL:    # Check left/west to wall or edge of map
+                while wall_tile_x > 0 and self.map[wall_tile_y][wall_tile_x][0] != Environment.WALL:    # Check left/west to wall or edge of map
                     wall_tile_x -= 1
                 if self.map[wall_tile_y][wall_tile_x][0] != Environment.WALL:
                     wall_tile_y = target.y
                     wall_tile_x = target.x
-                    while wall_tile_x < len(self.map[0]) and self.map[wall_tile_y][wall_tile_x][0] != Environment.WALL:    # Check right/east to wall or edge of map
+                    while wall_tile_x < (len(self.map[0]) - 1) and self.map[wall_tile_y][wall_tile_x][0] != Environment.WALL:    # Check right/east to wall or edge of map
                         wall_tile_x += 1
                     if self.map[wall_tile_y][wall_tile_x][0] != Environment.WALL:
                         print("trapped in small box. Some obscure map this is.")
@@ -659,6 +697,11 @@ class Player:
             print(wall_loop)
             for tile in wall_loop:
                 ct.draw_indicator_dot(Position(tile[0], tile[1]), 255, 0, 0)
+            inside_points = self.cells_inside_loop(wall_loop)
+            print(inside_points)
+            for tile in inside_points:
+                ct.draw_indicator_dot(Position(tile[0], tile[1]), 0, 255, 0)
+                self.unreachable_tiles.append(Position(tile[0], tile[1]))
 
     def find_enemy_core(self, ct):
         ct.draw_indicator_dot(ct.get_position(), 0, 0, 255)
@@ -666,9 +709,6 @@ class Player:
             self.explore(ct, self.target)
             ct.draw_indicator_line(ct.get_position(), self.target, 255, 255, 255)
             #ct.draw_indicator_dot(ct.get_position(), 255, 255, 255)
-            if self.enemy_core_pos != Position(1000, 1000):
-                self.explore_target = Position(1000, 1000)
-                self.explore_left = True
         elif self.enemy_core_pos != Position(1000, 1000):  # Report enemy core position back to core
             self.status = REPORT_ENEMY_CORE_LOCATION
         elif len(self.tit) != 0 or len(self.ax) != 0:    # Mine for ore
@@ -676,30 +716,33 @@ class Player:
             self.target = Position(1000, 1000)
         else:   # Explore from outside corner in
             self.status = EXPLORING
+            self.target = Position(1000, 1000)
 
     def exploring_the_map(self, ct):
-        CORNERS = [Position(0, 0), Position(ct.get_map_width()-1, 0), Position(0, ct.get_map_height()-1), Position(ct.get_map_width()-1, ct.get_map_height()-1)]
-        closest_corner = Position(1000, 1000)
-        iteration = 0
-        while closest_corner == Position(1000, 1000) and iteration < (Position(0, 0).distance_squared(Position(int(ct.get_map_width()/2), int(ct.get_map_height()/2))))/7: # Ends if new position to explore is found or is at centre
-            for corner in CORNERS:
-                for i in range(7*iteration):
-                    corner = corner.add(Direction.CENTRE)
-                    if corner == Position(int(ct.get_map_width()/2), int(ct.get_map_height()/2)):
-                        break
-                if self.map[corner.y][corner.x] == [0, 0, 0, [0], 0] and ct.get_position().distance_squared(corner) < ct.get_position().distance_squared(closest_corner):
-                    closest_corner = corner
-            iteration += 1
-        if closest_corner == Position(1000, 1000):
-            self.status = DEFENCE # Switch to defence for now
-        else:   # Explore to chosen corner
-            self.target = closest_corner
+        if self.target != Position(1000, 1000) and self.map[self.target.y][self.target.x][0] == 0:
             self.explore(ct)
-            if closest_corner in ct.get_nearby_tiles():
-                self.explore_target = Position(1000, 1000)
-                self.explore_left = True
-        # Find closest corner, move until it is in vision radius (covered by first if)
-        ct.draw_indicator_dot(self.target, 255, 0, 0)
+        else:
+            self.target = Position(1000, 1000)
+            CORNERS = [Position(0, 0), Position(ct.get_map_width()-1, 0), Position(0, ct.get_map_height()-1), Position(ct.get_map_width()-1, ct.get_map_height()-1)]
+            closest_corner = self.target    #=Position(1000, 1000)
+            iteration = 0
+            while closest_corner == Position(1000, 1000) and iteration < (Position(0, 0).distance_squared(Position(int(ct.get_map_width()/2), int(ct.get_map_height()/2))))/7: # Ends if new position to explore is found or is at centre
+                for corner in CORNERS:
+                    for i in range(7*iteration):
+                        corner = corner.add(Direction.CENTRE)
+                        if corner == Position(int(ct.get_map_width()/2), int(ct.get_map_height()/2)):
+                            break
+                    if self.map[corner.y][corner.x] == [0, 0, 0, [0], 0] and ct.get_position().distance_squared(corner) < ct.get_position().distance_squared(closest_corner):
+                        closest_corner = corner
+                iteration += 1
+            if closest_corner == Position(1000, 1000):
+                self.status = DEFENCE # Switch to defence for now
+                self.target = Position(1000, 1000)
+            else:   # Explore to chosen corner
+                self.target = closest_corner
+                self.explore(ct)
+            # Find closest corner, move until it is in vision radius (covered by first if)
+            ct.draw_indicator_dot(self.target, 255, 0, 0)
 
     def report_enemy_core_location(self, ct):
         pass
@@ -794,7 +837,7 @@ class Player:
                     
         elif etype == EntityType.BUILDER_BOT:
 
-            if ct.get_current_round() >= 200:
+            if ct.get_current_round() >= 500:
                 ct.resign()
 
             # Update map and print update timings
@@ -836,6 +879,7 @@ class Player:
                     self.harvest_ore(ct, closest_ax)
                     ct.draw_indicator_line(ct.get_position(), closest_ax, 0, 255, 0)
                 else:
+                    self.target = Position(1000, 1000)
                     self.status = EXPLORING
                 #self.mining_titanium(ct)
 
@@ -848,8 +892,6 @@ class Player:
                 if ct.get_position().distance_squared(self.target) > 2:
                     self.explore(ct)
                 else:
-                    self.explore_target = Position(1000, 1000)
-                    self.explore_left = True
                     if ct.can_destroy(self.target) and ct.get_entity_type(ct.get_tile_building_id(self.target)) in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR]:
                         ct.destroy(self.target)
 
@@ -883,9 +925,6 @@ class Player:
                                         self.target = self.target.add(dir)
                                         self.explore(ct)
                                         self.target = temp
-                                    else:
-                                        self.explore_target = Position(1000, 1000)
-                                        self.explore_left = True
                                     if ct.can_destroy(self.target.add(dir)):
                                         ct.destroy(self.target.add(dir))
                                     if ct.can_build_foundry(self.target.add(dir)):
@@ -902,9 +941,6 @@ class Player:
                                         self.target = self.target.add(dir.rotate_left().rotate_left())
                                         self.explore(ct)
                                         self.target = temp
-                                    else:
-                                        self.explore_target = Position(1000, 1000)
-                                        self.explore_left = True
                                     if ct.can_destroy(self.target.add(dir.rotate_left().rotate_left())):
                                         ct.destroy(self.target.add(dir.rotate_left().rotate_left()))
                                     if ct.can_build_foundry(self.target.add(dir.rotate_left().rotate_left())):
@@ -921,9 +957,6 @@ class Player:
                                         self.target = self.target.add(dir.rotate_right().rotate_right())
                                         self.explore(ct)
                                         self.target = temp
-                                    else:
-                                        self.explore_target = Position(1000, 1000)
-                                        self.explore_left = True
                                     if ct.can_destroy(self.target.add(dir.rotate_right().rotate_right())):
                                         ct.destroy(self.target.add(dir.rotate_right().rotate_right()))
                                     if ct.can_build_foundry(self.target.add(dir.rotate_right().rotate_right())):
@@ -937,8 +970,6 @@ class Player:
                                 ct.destroy(self.marker_location)
                                 self.target = Position(1000, 1000)
                                 self.marker_location = Position(1000, 1000)
-                                self.explore_target = Position(1000, 1000)
-                                self.explore_left = True
                             else:
                                 temp = self.target
                                 self.target = self.marker_location
