@@ -229,6 +229,8 @@ class Player:
             if d < best_dist:
                 best_dist = d
                 best_tile = current[3]
+                if d == 0:
+                    break
             
             if (current[3].x == target.x) and (current[3].y == target.y):
                 break
@@ -265,7 +267,7 @@ class Player:
             elif any:
                 for i in range(3):
                     for j in range(3):
-                        if (not (i == 1 and j == 1)) and current[3].x + (i-1) >= 0 and current[3].x + (i-1) < len(self.map[0]) and current[3].y + (j-1) >= 0 and current[3].y + (j-1) < len(self.map) and (current[3] not in self.unreachable_tiles) and (((not (self.map[current[3].y + (j-1)][current[3].x + (i-1)][4] in [EntityType.BUILDER_BOT] and ct.get_position().distance_squared(current[3]) <= 2)) and (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.MARKER, EntityType.ROAD, EntityType.SPLITTER] or (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] == EntityType.CORE and self.map[current[3].y + (j-1)][current[3].x + (i-1)][2] == ct.get_team()) or (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] == None and self.map[current[3].y + (j-1)][current[3].x + (i-1)][0] != Environment.WALL))) or self.map[current[3].y + (j-1)][current[3].x + (i-1)][0] == 0):
+                        if (not (i == 1 and j == 1)) and current[3].x + (i-1) >= 0 and current[3].x + (i-1) < len(self.map[0]) and current[3].y + (j-1) >= 0 and current[3].y + (j-1) < len(self.map) and (current[3] not in self.unreachable_tiles) and (self.map[current[3].y + (j-1)][current[3].x + (i-1)][0] == 0 or (not (self.map[current[3].y + (j-1)][current[3].x + (i-1)][4] in [EntityType.BUILDER_BOT] and ct.get_position().distance_squared(current[3]) <= 2)) and (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.MARKER, EntityType.ROAD, EntityType.SPLITTER] or (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] == EntityType.CORE and self.map[current[3].y + (j-1)][current[3].x + (i-1)][2] == ct.get_team()) or (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] == None and self.map[current[3].y + (j-1)][current[3].x + (i-1)][0] != Environment.WALL))):
                             check_tiles.append((current[3].x + (i-1), current[3].y + (j-1)))
             
             else:           # If normal one square movement, consider all surrounding tiles from current position
@@ -296,8 +298,10 @@ class Player:
                     cost_so_far[tile_pos] = new_cost    # Updates smallest cost for location
                     if bridge:      # Calculates which tile to move to based off heuristic
                         priority = new_cost + self.heuristic_squaredEuclidean(tile_pos, target)
-                    else:
+                    elif conv:
                         priority = new_cost + self.heuristic_Chebyshev(tile_pos, target)
+                    else:   # General movement
+                        priority = new_cost + abs(tile_pos.x - target.x) + abs(tile_pos.y - target.y)
                     q.put((priority, moveTile, dist, tile_pos))
                     came_from[tile_pos] = current[3]    # Updates check locations
             #break
