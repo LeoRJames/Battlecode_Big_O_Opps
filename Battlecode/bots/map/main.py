@@ -8,6 +8,7 @@ import heapq
 DIRECTIONS = [d for d in Direction if d != Direction.CENTRE]
 STRAIGHTS = [Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST]
 DIAGONALS = [Direction.NORTHWEST, Direction.NORTHEAST, Direction.SOUTHEAST, Direction.SOUTHWEST]
+NON_PASSABLE = [EntityType.HARVESTER, EntityType.BARRIER, EntityType.BREACH, EntityType.FOUNDRY, EntityType.GUNNER, EntityType.LAUNCHER, EntityType.SENTINEL, Environment.WALL]
 
 # STATUS CONSTANTS
 INIT = 0
@@ -431,7 +432,7 @@ class Player:
 
         while open_heap:
 
-            if ct.get_cpu_time_elapsed() > 1900:
+            if ct.get_cpu_time_elapsed() > 1500:    # Cut off time to give sufficient time after completion to do remaining processes
                 self.open_heap = open_heap
                 self.came_from = came_from
                 self.cost_so_far = cost_so_far
@@ -1035,7 +1036,7 @@ class Player:
             if not (0 <= nx < w and 0 <= ny < h):
                 continue
 
-            if grid[ny][nx][0] != Environment.WALL:
+            if grid[ny][nx][0] != Environment.WALL and grid[ny][nx][2] not in NON_PASSABLE:
                 continue
 
             queue = deque()
@@ -1060,7 +1061,7 @@ class Player:
                     if (xx, yy) in visited:
                         continue
                     
-                    if grid[yy][xx][0] != Environment.WALL:
+                    if grid[yy][xx][0] != Environment.WALL and grid[ny][nx][2] not in NON_PASSABLE:
                         continue
 
                     visited.add((xx, yy))
