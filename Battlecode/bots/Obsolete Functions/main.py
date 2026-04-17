@@ -442,3 +442,121 @@ def explore(self, ct, target=None):
             self.explore(ct, self.explore_target)
         #if self.explore_target == self.target:
             #self.explore_target = Position(1000, 1000)
+
+
+def pathfinder(self, ct, target, start=None, bridge=False, conv=False, avoid=False, any=False):       # Pass Position
+        pre_path_finder_time = ct.get_cpu_time_elapsed()
+        if start == None:
+            start = self.pos
+        q = PriorityQueue()
+        moveTile = 0        # Tie breakers for equal path lengths
+        dist = 0
+        q.put((0, moveTile, dist,  start))  # Priority list to choose which tile to check next
+        came_from = {}      # Dictionary of movement path
+        cost_so_far = {}    # Dictionary of cost of movement
+        came_from[start] = None
+        cost_so_far[start] = 0
+        best_tile = start
+        if bridge:
+            best_dist = self.heuristic_squaredEuclidean(start, target)
+        else:
+            best_dist = self.heuristic_Chebyshev(start, target)
+
+        counter = 0
+        while not q.empty():
+            counter += 1
+            if counter%10 == 0:
+                print(counter)
+            current = q.get()   # Returns highest priority item on queue
+
+            # Update best reachable tile
+            if bridge:
+                d = (self.heuristic_squaredEuclidean(current[3], target))**(1/2)
+            else:
+                d = self.heuristic_Chebyshev(current[3], target)    #abs(current[3].x - target.x) + abs(current[3].y - target.y)   # self.heuristic_Chebyshev(current[3], target)
+            if d < best_dist:
+                best_dist = d
+                best_tile = current[3]
+                if d == 0:
+                    break
+            
+            if (current[3].x == target.x) and (current[3].y == target.y):
+                break
+            
+            check_tiles = []
+            
+            # Adds all surrounding
+            if bridge:      # If bridge consider all tiles a bridge can be built to
+                if avoid:
+                    for i in range(7):
+                        for j in range(7):
+                            if (not (i == 3 and j == 3)) and ((((i-3)**2)+((j-3)**2)) <= 9) and current[3].x + (i-3) >= 0 and current[3].x + (i-3) < len(self.map[0]) and current[3].y + (j-3) >= 0 and current[3].y + (j-3) < len(self.map) and (current[3] not in self.unreachable_tiles) and ((self.map[current[3].y + (j-3)][current[3].x + (i-3)][1] in [EntityType.MARKER, EntityType.ROAD, EntityType.CORE, EntityType.SPLITTER] and self.map[current[3].y + (j-3)][current[3].x + (i-3)][2] == self.team) or (self.map[current[3].y + (j-3)][current[3].x + (i-3)][1] == None and self.map[current[3].y + (j-3)][current[3].x + (i-3)][0] in [Environment.EMPTY])):  # (not (self.map[current[3].y + (j-3)][current[3].x + (i-3)][4] in [EntityType.BUILDER_BOT] and self.pos.distance_squared(current[3]) <= 9)) and 
+                                check_tiles.append((current[3].x + (i-3), current[3].y + (j-3)))
+                                #ct.draw_indicator_dot(Position(current[3].x + (i-3), current[3].y + (j-3)), 255, 0, 0)
+                else:
+                    for i in range(7):
+                        for j in range(7):
+                            if (not (i == 3 and j == 3)) and ((((i-3)**2)+((j-3)**2)) <= 9) and current[3].x + (i-3) >= 0 and current[3].x + (i-3) < len(self.map[0]) and current[3].y + (j-3) >= 0 and current[3].y + (j-3) < len(self.map) and (current[3] not in self.unreachable_tiles) and ((self.map[current[3].y + (j-3)][current[3].x + (i-3)][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.MARKER, EntityType.ROAD, EntityType.CORE, EntityType.SPLITTER] and self.map[current[3].y + (j-3)][current[3].x + (i-3)][2] == self.team) or (self.map[current[3].y + (j-3)][current[3].x + (i-3)][1] == None and self.map[current[3].y + (j-3)][current[3].x + (i-3)][0] in [Environment.EMPTY])):  # (not (self.map[current[3].y + (j-3)][current[3].x + (i-3)][4] in [EntityType.BUILDER_BOT] and self.pos.distance_squared(current[3]) <= 9)) and 
+                                check_tiles.append((current[3].x + (i-3), current[3].y + (j-3)))
+                                #ct.draw_indicator_dot(Position(current[3].x + (i-3), current[3].y + (j-3)), 255, 0, 0)
+            elif conv:      # If conveyor, consider only straight surrounding tiles
+                if avoid:
+                    for i in range(3):
+                        for j in range(3):
+                            if (not (abs(i-1) == abs(j-1))) and current[3].x + (i-1) >= 0 and current[3].x + (i-1) < len(self.map[0]) and current[3].y + (j-1) >= 0 and current[3].y + (j-1) < len(self.map) and (current[3] not in self.unreachable_tiles) and ((self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] in [EntityType.MARKER, EntityType.ROAD, EntityType.CORE, EntityType.SPLITTER] and self.map[current[3].y + (j-1)][current[3].x + (i-1)][2] == self.team) or (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] == None and self.map[current[3].y + (j-1)][current[3].x + (i-1)][0] in [Environment.EMPTY])) and not (self.map[current[3].y + (j-1)][current[3].x + (i-1)][4] is not None and current[3].distance_squared(self.pos) == 1):  # (not (self.map[current[3].y + (j-1)][current[3].x + (i-1)][4] in [EntityType.BUILDER_BOT] and self.pos.distance_squared(current[3]) <= 1) and
+                                check_tiles.append((current[3].x + (i-1), current[3].y + (j-1)))
+                                #ct.draw_indicator_dot(Position(current[3].x + (i-1), current[3].y + (j-1)), 0, 255, 0)
+                else:
+                    for i in range(3):
+                        for j in range(3):
+                            if (not (abs(i-1) == abs(j-1))) and current[3].x + (i-1) >= 0 and current[3].x + (i-1) < len(self.map[0]) and current[3].y + (j-1) >= 0 and current[3].y + (j-1) < len(self.map) and (current[3] not in self.unreachable_tiles) and ((self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.MARKER, EntityType.ROAD, EntityType.CORE, EntityType.SPLITTER] and self.map[current[3].y + (j-1)][current[3].x + (i-1)][2] == self.team) or (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] == None and self.map[current[3].y + (j-1)][current[3].x + (i-1)][0] in [Environment.EMPTY])) and not (self.map[current[3].y + (j-1)][current[3].x + (i-1)][4] is not None and current[3].distance_squared(self.pos) == 1):  # (not (self.map[current[3].y + (j-1)][current[3].x + (i-1)][4] in [EntityType.BUILDER_BOT] and self.pos.distance_squared(current[3]) <= 1) and
+                                check_tiles.append((current[3].x + (i-1), current[3].y + (j-1)))
+                                #ct.draw_indicator_dot(Position(current[3].x + (i-1), current[3].y + (j-1)), 0, 255, 0)
+            elif any:
+                for i in range(3):
+                    for j in range(3):
+                        if (not (i == 1 and j == 1)) and current[3].x + (i-1) >= 0 and current[3].x + (i-1) < len(self.map[0]) and current[3].y + (j-1) >= 0 and current[3].y + (j-1) < len(self.map) and (current[3] not in self.unreachable_tiles) and (self.map[current[3].y + (j-1)][current[3].x + (i-1)][0] == 0 or (not (self.map[current[3].y + (j-1)][current[3].x + (i-1)][4] in [EntityType.BUILDER_BOT] and self.pos.distance_squared(current[3]) <= 2)) and (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.MARKER, EntityType.ROAD, EntityType.SPLITTER] or (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] == EntityType.CORE and self.map[current[3].y + (j-1)][current[3].x + (i-1)][2] == self.team) or (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] == None and self.map[current[3].y + (j-1)][current[3].x + (i-1)][0] != Environment.WALL))):
+                            check_tiles.append((current[3].x + (i-1), current[3].y + (j-1)))
+            
+            else:           # If normal one square movement, consider all surrounding tiles from current position
+                for i in range(3):
+                    for j in range(3):
+                        if (not (i == 1 and j == 1)) and current[3].x + (i-1) >= 0 and current[3].x + (i-1) < len(self.map[0]) and current[3].y + (j-1) >= 0 and current[3].y + (j-1) < len(self.map) and (current[3] not in self.unreachable_tiles) and ((not (self.map[current[3].y + (j-1)][current[3].x + (i-1)][4] in [EntityType.BUILDER_BOT] and self.pos.distance_squared(current[3]) <= 2)) and (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.MARKER, EntityType.ROAD, EntityType.SPLITTER] or (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] == EntityType.CORE and self.map[current[3].y + (j-1)][current[3].x + (i-1)][2] == self.team) or (self.map[current[3].y + (j-1)][current[3].x + (i-1)][1] == None and self.map[current[3].y + (j-1)][current[3].x + (i-1)][0] != Environment.WALL))):
+                            check_tiles.append((current[3].x + (i-1), current[3].y + (j-1)))
+                            #ct.draw_indicator_dot(Position(current[3].x + (i-1), current[3].y + (j-1)), 0, 0, 255)
+            for tile in check_tiles:
+                moveTile = 0
+                dist = 11
+                tile_pos = Position(tile[0], tile[1])
+                #if current[3].distance_squared(tile_pos) > 1:   # Prefer to move in a straight line rather than diagonally
+                    #counter += 1
+                if self.map[tile[1]][tile[0]][1] == None:   # Prefer not to move over non-passable spaces (to save resources building extra paths)
+                    moveTile += 1
+                if bridge:
+                    dist = dist - current[3].distance_squared(tile_pos) # Prefer to build longest bridge
+                else:
+                    dist = current[3].distance_squared(tile_pos)    # Prefer to move in straight lines (as I think is more valuable for information)
+                #ct.draw_indicator_dot(tile, 0, 0, 255)
+                if bridge:
+                    new_cost = cost_so_far[current[3]] + (tile_pos.distance_squared(current[3]))**(1/2)
+                    #new_cost = cost_so_far[current[3]] + tile_pos.distance_squared(current[3])  # For bridges, squared euclidean distance matters
+                else:
+                    new_cost = cost_so_far[current[3]] + 1     # Each move costs one move cooldown whether straight or diagonal for general movement
+                if tile_pos not in cost_so_far or new_cost < cost_so_far[tile_pos]:     # Considers tile if not considered before or new path gets to it quicker
+                    cost_so_far[tile_pos] = new_cost    # Updates smallest cost for location
+                    if bridge:      # Calculates which tile to move to based off heuristic
+                        priority = new_cost + self.heuristic_squaredEuclidean(tile_pos, target)
+                    elif conv:
+                        priority = new_cost + self.heuristic_Chebyshev(tile_pos, target)
+                    else:   # General movement
+                        priority = new_cost + abs(tile_pos.x - target.x) + abs(tile_pos.y - target.y)
+                    q.put((priority, moveTile, dist, tile_pos))
+                    came_from[tile_pos] = current[3]    # Updates check locations
+            #break
+        post_path_finder_time = ct.get_cpu_time_elapsed()
+        dist = self.heuristic_Chebyshev(start, target)
+        print(f"Path Finder Stats:")
+        print(f" time | iter |  t/l  | t/dist")
+        print(f" {post_path_finder_time - pre_path_finder_time:04} | {counter:04} | {(post_path_finder_time - pre_path_finder_time)/counter:.2f} | {(post_path_finder_time - pre_path_finder_time)/dist:.2f}")
+        print("")
+        return came_from, cost_so_far, best_tile
