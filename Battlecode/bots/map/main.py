@@ -1,7 +1,7 @@
 import random
 from queue import PriorityQueue
 from collections import deque
-from cambc import Controller, Direction, EntityType, Environment, Position
+from cambc import Controller, Direction, EntityType, Environment, Position, ResourceType
 import heapq
 
 # non-centre directions
@@ -20,6 +20,7 @@ EXPLORING = 1
 MINING_TITANIUM = 2
 DEFENCE = 7
 ATTACK_ENEMY_SUPPLY_LINES = 5
+FOUNDRY = 6
 
 class Player:
     def __init__(self):
@@ -39,7 +40,7 @@ class Player:
         self.target = Position(1000, 1000)  # Target position for exploring
         self.transport_resource_var = False
         self.move_dir = Direction.CENTRE     # Arbitrary
-        self.core_stored_resource = {}
+        self.splitter_resource = {}
         self.marker_locations = []
         self.unreachable_ores = [] # List of unreachable ores
         self.unreachable_tiles = []
@@ -54,6 +55,7 @@ class Player:
         self.mined_ax = []
         self.enemy_mined_tit = []   # Tracks ores enemy has mined
         self.enemy_mined_ax = []
+        self.splitter_target = None
 
     def initialise_map(self, ct):   # Set up 2d array for each tile on map each storing a list of three info pieces (tile type, building, team)
         self.team = ct.get_team()
@@ -105,6 +107,19 @@ class Player:
                     self.enemy_core_pos = ct.get_position(building_id)
                 else:
                     self.map[tile.y][tile.x][3][0] = None
+
+                if entity == EntityType.SPLITTER and team == self.team:
+                    res = ct.get_stored_resource(building_id)
+                    if tile in self.splitter_resource and self.splitter_resource[tile] == False or res == ResourceType.REFINED_AXIONITE:   # Harvester already built to that splitter
+                        pass
+                    elif res != None and tile not in self.splitter_resource:    # If not recorded a resource
+                        self.splitter_resource[tile] = res
+                    elif res != None and tile in self.splitter_resource and self.splitter_resource[tile] != res:    # If a different resource recorded through splitter
+                        self.splitter_resource[tile] = True
+                        if self.status == DEFENCE:
+                            self.status = FOUNDRY
+                            self.target = tile
+
 
                 if self.map[tile.y][tile.x][0] == Environment.ORE_TITANIUM and tile not in self.tit and tile not in self.unreachable_ores and not(entity == EntityType.HARVESTER or (team != my_team and entity not in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.ROAD])):
                     self.tit.append(tile)
@@ -544,7 +559,10 @@ class Player:
 
         vision_tiles = ct.get_nearby_tiles()
         for d in DIRECTIONS:
-            if self.map[self.pos.add(d).y][self.pos.add(d).x][1] == EntityType.CORE:
+            yy = self.pos.add(d).y
+            xx = self.pos.add(d).x
+
+            if yy >= 0 and yy < len(self.map) and xx >= 0 and xx < len(self.map[0]) and self.map[self.pos.add(d).y][self.pos.add(d).x][1] == EntityType.CORE:
                 self.core_pos = ct.get_position(ct.get_tile_building_id(self.pos.add(d)))
                 break
 
@@ -688,7 +706,7 @@ class Player:
                     self.ax.remove(ore)
                 else:
                     print("ore is not in tit or ax!")
-                    ct.resign()
+                    #ct.resign()
                 return
 
             if ore.distance_squared(self.pos) > 2:
@@ -735,7 +753,7 @@ class Player:
             if best_end_tile != self.core_pos:
                 # No path exists!
                 print("No path home exists!")
-                ct.resign()     # PROBLEM
+                #ct.resign()     # PROBLEM
             path = self.reconstruct_path(path_dict, best_end_tile)
             ct.draw_indicator_line(path[1], path[0], 0, 0, 0)
 
@@ -762,7 +780,9 @@ class Player:
                     ct.destroy(path[0])
                 if len(path) > 2 and self.map[path[1].y][path[1].x][1] == EntityType.CORE:
                     for d in STRAIGHTS:
-                        if self.map[path[0].add(d).y][path[0].add(d).x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR]:
+                        yy = path[0].add(d).y
+                        xx = path[0].add(d).x
+                        if yy >= 0 and yy < len(self.map) and xx >= 0 and xx < len(self.map[0]) and self.map[path[0].add(d).y][path[0].add(d).x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR]:
                             direction = self.map[path[0].add(d).y][path[0].add(d).x][3][0]
                             if ct.can_build_splitter(path[0],direction):
                                 ct.build_splitter(path[0], direction)
@@ -827,7 +847,7 @@ class Player:
             if not (0 <= nx < w and 0 <= ny < h):
                 continue
 
-            if grid[ny][nx][0] != Environment.WALL and grid[ny][nx][2] not in NON_PASSABLE:
+            if grid[ny][nx][0] != Environment.WALL and (len(grid[ny][nx]) < 2 or grid[ny][nx][1] not in NON_PASSABLE):
                 continue
 
             queue = deque()
@@ -852,7 +872,7 @@ class Player:
                     if (xx, yy) in visited:
                         continue
                     
-                    if grid[yy][xx][0] != Environment.WALL and grid[ny][nx][2] not in NON_PASSABLE:
+                    if grid[yy][xx][0] != Environment.WALL and (len(grid[yy][xx]) < 2 or grid[yy][xx][1] not in NON_PASSABLE):
                         continue
 
                     visited.add((xx, yy))
@@ -1047,6 +1067,7 @@ class Player:
                 print("CRY")
 
     def defence(self, ct):
+        print("DEFENCE")
         if ct.is_in_vision(self.core_pos) and ct.get_hp(ct.get_tile_building_id(self.core_pos)) < 500:
             self.target = self.core_pos
             if ct.can_heal(self.core_pos):
@@ -1062,12 +1083,19 @@ class Player:
 
         if self.target == self.core_pos:
             for i in vision_tiles:
+                building_targets = None
                 if ct.get_entity_type(ct.get_tile_building_id(i)) in [EntityType.SPLITTER]:
                     building_targets = [i.add(ct.get_direction(ct.get_tile_building_id(i))), i.add(ct.get_direction(ct.get_tile_building_id(i)).rotate_left().rotate_left()), i.add(ct.get_direction(ct.get_tile_building_id(i)).rotate_right().rotate_right())]
+                elif ct.get_entity_type(ct.get_tile_building_id(i)) in [EntityType.FOUNDRY]:
+                    building_targets = [i.add(Direction.NORTH), i.add(Direction.WEST), i.add(Direction.EAST), i.add(Direction.SOUTH)]
+                                  
+                if building_targets != None:
                     for building_target in building_targets:
-                        if ct.is_in_vision(building_target) and ct.get_entity_type(ct.get_tile_building_id(building_target)) not in [EntityType.CORE, EntityType.SPLITTER, EntityType.GUNNER] and ct.get_tile_env(building_target) != Environment.WALL:
+                        
+                        if building_target.x >= 0 and building_target.x < len(self.map[0]) and building_target.y >= 0 and building_target.y < len(self.map) and ct.is_in_vision(building_target) and ct.get_entity_type(ct.get_tile_building_id(building_target)) not in [EntityType.CORE, EntityType.SPLITTER, EntityType.GUNNER, EntityType.HARVESTER, EntityType.SENTINEL, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.FOUNDRY] and ct.get_tile_env(building_target) != Environment.WALL:
                             if building_target.distance_squared(pos) < self.target.distance_squared(pos) or self.target == self.core_pos:
                                 self.target = building_target
+                                print(self.target)
 
             for i in ct.get_nearby_tiles():
                 if ct.get_hp(ct.get_tile_building_id(i)) < ct.get_max_hp(ct.get_tile_building_id(i)) and ct.get_team() == self.team:
@@ -1078,18 +1106,21 @@ class Player:
         if self.target == self.core_pos and ct.get_entity_type(ct.get_tile_building_id(pos)) == EntityType.CORE:
             print("Cry")
             return
+        
+        if self.pos.distance_squared(self.target) > 2:
+            self.explore(ct)
 
-        if ct.can_heal(self.target):
+        elif ct.can_heal(self.target):
             print("Healing")
             ct.heal(self.target)
             return
-        elif ct.can_destroy(self.target) and ct.get_entity_type(ct.get_tile_building_id(self.target)) not in [EntityType.SPLITTER, EntityType.GUNNER]:
+        elif ct.can_destroy(self.target) and ct.get_entity_type(ct.get_tile_building_id(self.target)) not in [EntityType.SPLITTER, EntityType.GUNNER, EntityType.HARVESTER, EntityType.SENTINEL, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.FOUNDRY]:
             ct.destroy(self.target)
             self.target = self.core_pos
         for d in STRAIGHTS:
             if (ct.can_build_gunner(self.target, d.opposite()) and
                     ( 0 < self.target.add(d).y < ct.get_map_height() or ct.get_tile_building_id(self.target.add(d)) is not None) and
-                    0 < self.target.add(d).x < ct.get_map_width() and ct.get_entity_type(ct.get_tile_building_id(self.target.add(d))) in [EntityType.SPLITTER]):
+                    0 < self.target.add(d).x < ct.get_map_width() and ct.get_entity_type(ct.get_tile_building_id(self.target.add(d))) in [EntityType.SPLITTER, EntityType.FOUNDRY]):
                 ct.build_gunner(self.target, d.opposite())
 
         if pos == self.target:
@@ -1097,8 +1128,8 @@ class Player:
                 if ct.can_move(d):
                     ct.move(d)
 
-        if not(ct.get_position().add(ct.get_position().direction_to(self.target)) == self.target):
-            self.explore(ct)
+        #if not(ct.get_position().add(ct.get_position().direction_to(self.target)) == self.target):
+            #self.explore(ct)
 
     def gn_init(self,ct):
         vision_tiles = ct.get_nearby_tiles()
@@ -1453,172 +1484,68 @@ class Player:
                     elif self.pos != self.target and self.map[self.target.y][self.target.x][2] != ct.get_team():
                         self.explore(ct)
 
-
-            # IDK about whats below here...
-                '''
-            elif self.status == 5:  # Build foundry
+            elif self.status == FOUNDRY:
+                print("FOUNDRY")
                 if self.pos.distance_squared(self.target) > 2:
-                    self.explore(ct)
+                    came_from, cost, best_tile = self.pathfinder(ct, self.target)
+                    path = self.reconstruct_path(came_from, best_tile)
+                    if len(path) > 1:
+                        if ct.can_build_road(path[1]):
+                            ct.build_road(path[1])
+                        if ct.can_move(self.pos.direction_to(path[1])):
+                            ct.move(self.pos.direction_to(path[1]))
                 else:
-                    if ct.can_destroy(self.target) and ct.get_entity_type(ct.get_tile_building_id(self.target)) in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR]:
-                        ct.destroy(self.target)
-
-                    dir = None
-
-                    for tile in ct.get_nearby_tiles(5):
-                        if self.target.distance_squared(tile) == 1 and ct.get_entity_type(ct.get_tile_building_id(tile)) in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR]:
-                            if ct.get_direction(ct.get_tile_building_id(tile)) == tile.direction_to(self.target):
-                                dir = tile.direction_to(self.target)
+                    if self.map[self.target.y][self.target.x][1] == EntityType.SPLITTER:   # Choose tile to build harvester
+                        checks = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+                        chosen_tile = None
+                        for shift in checks:
+                            building = self.map[self.target.y + shift[1]][self.target.x + shift[0]][1]
+                            team = self.map[self.target.y + shift[1]][self.target.x + shift[0]][2]
+                            check_tile = Position(self.target.x + shift[0], self.target.y + shift[1])
+                            if building == EntityType.FOUNDRY and team == self.team:  # If a foundry already on splitter then ignore
+                                chosen_tile = None
                                 break
-
-                    if dir == None:
-                        if len(self.tit) > 0 or len(self.ax) > 0:
-                            self.status = 2
-                        else:
-                            self.status = 1
-
-                    else:
-
-                        if ct.can_build_splitter(self.target, dir):
-                            ct.build_splitter(self.target, dir)
-
-                        elif ct.get_entity_type(ct.get_tile_building_id(self.target)) == EntityType.SPLITTER:
-                            dir = ct.get_direction(ct.get_tile_building_id(self.target))
-
-                            if self.map[self.target.add(dir).y][self.target.add(dir).x][1] != EntityType.CORE:
-                                if self.map[self.target.add(dir).y][self.target.add(dir).x][1] != EntityType.FOUNDRY:
-
-                                    if self.pos.distance_squared(self.target.add(dir)) > 2:
-                                        temp = self.target
-                                        self.target = self.target.add(dir)
-                                        self.explore(ct)
-                                        self.target = temp
-                                    if ct.can_destroy(self.target.add(dir)):
-                                        ct.destroy(self.target.add(dir))
-                                    if ct.can_build_foundry(self.target.add(dir)):
-                                        ct.build_foundry(self.target.add(dir))
-
-                                elif self.map[self.target.add(dir).y][self.target.add(dir).x][1] == EntityType.FOUNDRY:
-                                    pass    # build defences around harvester and splitter
-
-                            elif self.map[self.target.add(dir.rotate_left().rotate_left()).y][self.target.add(dir.rotate_left().rotate_left()).x][1] != EntityType.CORE and self.map[self.target.add(dir.rotate_left().rotate_left()).add(dir).y][self.target.add(dir.rotate_left().rotate_left()).add(dir).x][1] == EntityType.CORE:
-                                if self.map[self.target.add(dir.rotate_left().rotate_left()).y][self.target.add(dir.rotate_left().rotate_left()).x][1] != EntityType.FOUNDRY:
-
-                                    if self.pos.distance_squared(self.target.add(dir.rotate_left().rotate_left())) > 2:
-                                        temp = self.target
-                                        self.target = self.target.add(dir.rotate_left().rotate_left())
-                                        self.explore(ct)
-                                        self.target = temp
-                                    if ct.can_destroy(self.target.add(dir.rotate_left().rotate_left())):
-                                        ct.destroy(self.target.add(dir.rotate_left().rotate_left()))
-                                    if ct.can_build_foundry(self.target.add(dir.rotate_left().rotate_left())):
-                                        ct.build_foundry(self.target.add(dir.rotate_left().rotate_left()))
-
-                                elif self.map[self.target.add(dir.rotate_left()).y][self.target.add(dir.rotate_left()).x][1] == EntityType.FOUNDRY:
-                                    pass    # build defences around harvester and splitter
-
-                            elif self.map[self.target.add(dir.rotate_right().rotate_right()).y][self.target.add(dir.rotate_right().rotate_right()).x][1] != EntityType.CORE and self.map[self.target.add(dir.rotate_right().rotate_right()).add(dir).y][self.target.add(dir.rotate_right().rotate_right()).add(dir).x][1] == EntityType.CORE and self.map[self.target.add(dir.rotate_left().rotate_left()).y][self.target.add(dir.rotate_left().rotate_left()).x][1] != EntityType.FOUNDRY:
-                                if self.map[self.target.add(dir.rotate_right().rotate_right()).y][self.target.add(dir.rotate_right().rotate_right()).x][1] != EntityType.FOUNDRY:
-
-                                    if self.pos.distance_squared(self.target.add(dir.rotate_right().rotate_right())) > 2:
-                                        temp = self.target
-                                        self.target = self.target.add(dir.rotate_right().rotate_right())
-                                        self.explore(ct)
-                                        self.target = temp
-                                    if ct.can_destroy(self.target.add(dir.rotate_right().rotate_right())):
-                                        ct.destroy(self.target.add(dir.rotate_right().rotate_right()))
-                                    if ct.can_build_foundry(self.target.add(dir.rotate_right().rotate_right())):
-                                        ct.build_foundry(self.target.add(dir.rotate_right().rotate_right()))
-
-                                elif self.map[self.target.add(dir.rotate_right()).y][self.target.add(dir.rotate_right()).x][1] == EntityType.FOUNDRY:
-                                    pass    # build defences around harvester and splitter
-
-                        if self.marker_location != Position(1000, 1000) and self.map[self.target.y][self.target.x][1] == EntityType.SPLITTER and (self.map[self.target.add(ct.get_direction(ct.get_tile_building_id(self.target))).y][self.target.add(ct.get_direction(ct.get_tile_building_id(self.target))).x][1] == EntityType.FOUNDRY or self.map[self.target.add(ct.get_direction(ct.get_tile_building_id(self.target)).rotate_left().rotate_left()).y][self.target.add(ct.get_direction(ct.get_tile_building_id(self.target)).rotate_left().rotate_left()).x][1] == EntityType.FOUNDRY or self.map[self.target.add(ct.get_direction(ct.get_tile_building_id(self.target)).rotate_right()).y][self.target.add(ct.get_direction(ct.get_tile_building_id(self.target)).rotate_right()).x][1] == EntityType.FOUNDRY):  # Ensures marker gets destroyed
-                            if ct.can_destroy(self.marker_location):
-                                ct.destroy(self.marker_location)
-                                self.target = Position(1000, 1000)
-                                self.marker_location = Position(1000, 1000)
-                            else:
-                                temp = self.target
-                                self.target = self.marker_location
-                                self.explore(ct, self.marker_location)
-                                self.target = temp
-                        elif self.marker_location == Position(1000, 1000) and self.map[self.target.y][self.target.x][1] == EntityType.SPLITTER and (self.map[self.target.add(ct.get_direction(ct.get_tile_building_id(self.target))).y][self.target.add(ct.get_direction(ct.get_tile_building_id(self.target))).x][1] == EntityType.FOUNDRY or self.map[self.target.add(ct.get_direction(ct.get_tile_building_id(self.target)).rotate_left().rotate_left()).y][self.target.add(ct.get_direction(ct.get_tile_building_id(self.target)).rotate_left().rotate_left()).x][1] == EntityType.FOUNDRY or self.map[self.target.add(ct.get_direction(ct.get_tile_building_id(self.target)).rotate_right()).y][self.target.add(ct.get_direction(ct.get_tile_building_id(self.target)).rotate_right()).x][1] == EntityType.FOUNDRY):
+                            elif building == None:  # If nothing on a tile then good place to build
+                                chosen_tile = check_tile
+                            elif building in [EntityType.GUNNER, EntityType.SENTINEL] and team == self.team and chosen_tile == None:    # If turret on tile then could build here if not another tile already found
+                                chosen_tile = check_tile
+                             # reset now before target is changed as not needed to remain True
+                        if chosen_tile == None:
+                            self.splitter_resource[self.target] = False
                             self.target = Position(1000, 1000)
-
-                    #else not enough money so wait
-                
-                if self.target == Position(1000, 1000) and self.marker_location == Position(1000, 1000):
-                    if len(self.tit) > 0 or len(self.ax) > 0:
-                        self.status = 2
+                            self.status = DEFENCE
+                        else:
+                            self.splitter_target = self.target
+                            self.target = chosen_tile
+                        
                     else:
-                        self.status = 1
-            
-            '''
-
-            elif self.enemy_core_pos != Position(1000, 1000):
-                if self.pathfinder_start_pos == Position(1000, 1000):
-                    self.pathfinder_start_pos = self.pos
-                    ct.draw_indicator_dot(self.pathfinder_start_pos, 255, 255, 255)
-                else:
-                    ct.draw_indicator_dot(self.pathfinder_start_pos, 255, 255, 255)
-                count = 0
-                came_from, cost, best_tile_other = self.pathfinder(ct, self.core_pos, self.pathfinder_start_pos, True)
-                if came_from == None:
-                    return
-                path = self.reconstruct_path(came_from, self.core_pos)
-                if self.core_pos in path:
-                    self.pathfinder_start_pos = Position(1000, 1000)
-                    for tile in path:
-                        if (count % 3) == 0:
-                            ct.draw_indicator_dot(tile, 255, 0, 0)
-                        elif (count % 3) ==1:
-                            ct.draw_indicator_dot(tile, 0, 255, 0)
-                        elif (count % 3) ==2:
-                            ct.draw_indicator_dot(tile, 0, 0, 255)
-                        count += 1
-                    #ct.resign()
-                else:
-                    # move in a random direction
-                    move_dir = random.choice(DIRECTIONS)
-                    move_pos = self.pos.add(move_dir)
-                    # we need to place a conveyor or road to stand on, before we can move onto a tile
-                    if ct.can_build_road(move_pos):
-                        ct.build_road(move_pos)
-                    if ct.can_move(move_dir):
-                        ct.move(move_dir)
-                
-                #else:
-                    #ct.draw_indicator_dot(self.pos, 0, 0, 0)
-                ct.draw_indicator_dot(self.enemy_core_pos, 255, 255, 0)
-                ct.draw_indicator_dot(self.core_pos, 0, 255, 255)
-
-            #for y in range(len(self.map)):
-            #    for x in range(len(self.map[y])):
-            #        if self.map[y][x][1] == EntityType.BUILDER_BOT:
-            #            ct.draw_indicator_dot(Position(x,y), 0, 0, 0)
-            #        elif self.map[y][x][1] == EntityType.ARMOURED_CONVEYOR:
-            #            ct.draw_indicator_dot(Position(x,y), 255, 0, 0)
-            #        elif self.map[y][x][1] == EntityType.BRIDGE:
-            #            ct.draw_indicator_dot(Position(x,y), 0, 255, 0)
-            #        elif self.map[y][x][1] == EntityType.CONVEYOR:
-            #            ct.draw_indicator_dot(Position(x,y), 0, 0, 255)
-            #        elif self.map[y][x][1] == EntityType.MARKER:
-            #            ct.draw_indicator_dot(Position(x,y), 100, 100, 100)
-            #        elif self.map[y][x][1] == EntityType.ROAD:
-            #            ct.draw_indicator_dot(Position(x,y), 255, 255, 255)
-            #        elif self.map[y][x][1] == None:
-            #            ct.draw_indicator_dot(Position(x,y), 255, 0, 255)
-            #        if self.map[y][x][1] in [EntityType.BUILDER_BOT, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.MARKER, EntityType.ROAD]:
-            #            ct.draw_indicator_dot(Position(x,y), 0, 0, 0)
-            #        elif self.map[y][x][0] == Environment.EMPTY:
-            #            ct.draw_indicator_dot(Position(x,y), 0, 255, 0)
-            #        elif self.map[y][x][0] == Environment.WALL:
-            #            ct.draw_indicator_dot(Position(x,y), 255, 0, 0)
-            #        elif self.map[y][x][0] == Environment.ORE_TITANIUM:
-            #            ct.draw_indicator_dot(Position(x,y), 0, 0, 255)
-            #        elif self.map[y][x][0] == Environment.ORE_AXIONITE:
-            #            ct.draw_indicator_dot(Position(x,y), 255, 255, 0)
+                        if self.map[self.target.y][self.target.x][1] == EntityType.FOUNDRY:
+                            self.splitter_resource[self.splitter_target] = False
+                            self.splitter_target = None
+                            self.target = Position(1000, 1000)
+                            self.status = DEFENCE
+                        elif self.map[self.target.y][self.target.x][1] not in [EntityType.SPLITTER, EntityType.HARVESTER, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.FOUNDRY] and ct.can_destroy(self.target):
+                            checks = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+                            foundry = False
+                            for shift in checks:
+                                building = self.map[self.splitter_target.y + shift[1]][self.splitter_target.x + shift[0]][1]
+                                team = self.map[self.splitter_target.y + shift[1]][self.splitter_target.x + shift[0]][2]
+                                check_tile = Position(self.splitter_target.x + shift[0], self.splitter_target.y + shift[1])
+                                if building == EntityType.FOUNDRY and team == self.team:  # If a foundry already on splitter then ignore
+                                    foundry = True
+                                    break
+                            if not foundry:
+                                ct.destroy(self.target)
+                            else:
+                                self.splitter_resource[self.target] = False
+                                self.target = Position(1000, 1000)
+                                self.status = DEFENCE
+                        if ct.can_build_foundry(self.target):
+                            ct.build_foundry(self.target)
+                            self.splitter_resource[self.splitter_target] = False
+                            self.splitter_target = None
+                            self.target = Position(1000, 1000)
+                            self.status = DEFENCE
 
         elif etype == EntityType.GUNNER:
             if self.status == INIT:

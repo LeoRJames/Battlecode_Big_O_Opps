@@ -560,3 +560,101 @@ def pathfinder(self, ct, target, start=None, bridge=False, conv=False, avoid=Fal
         print(f" {post_path_finder_time - pre_path_finder_time:04} | {counter:04} | {(post_path_finder_time - pre_path_finder_time)/counter:.2f} | {(post_path_finder_time - pre_path_finder_time)/dist:.2f}")
         print("")
         return came_from, cost_so_far, best_tile
+
+elif self.status == 5:  # Build foundry
+                if self.pos.distance_squared(self.target) > 2:
+                    self.explore(ct)
+                else:
+                    if ct.can_destroy(self.target) and ct.get_entity_type(ct.get_tile_building_id(self.target)) in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR]:
+                        ct.destroy(self.target)
+
+                    dir = None
+
+                    for tile in ct.get_nearby_tiles(5):
+                        if self.target.distance_squared(tile) == 1 and ct.get_entity_type(ct.get_tile_building_id(tile)) in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR]:
+                            if ct.get_direction(ct.get_tile_building_id(tile)) == tile.direction_to(self.target):
+                                dir = tile.direction_to(self.target)
+                                break
+
+                    if dir == None:
+                        if len(self.tit) > 0 or len(self.ax) > 0:
+                            self.status = 2
+                        else:
+                            self.status = 1
+
+                    else:
+
+                        if ct.can_build_splitter(self.target, dir):
+                            ct.build_splitter(self.target, dir)
+
+                        elif ct.get_entity_type(ct.get_tile_building_id(self.target)) == EntityType.SPLITTER:
+                            dir = ct.get_direction(ct.get_tile_building_id(self.target))
+
+                            if self.map[self.target.add(dir).y][self.target.add(dir).x][1] != EntityType.CORE:
+                                if self.map[self.target.add(dir).y][self.target.add(dir).x][1] != EntityType.FOUNDRY:
+
+                                    if self.pos.distance_squared(self.target.add(dir)) > 2:
+                                        temp = self.target
+                                        self.target = self.target.add(dir)
+                                        self.explore(ct)
+                                        self.target = temp
+                                    if ct.can_destroy(self.target.add(dir)):
+                                        ct.destroy(self.target.add(dir))
+                                    if ct.can_build_foundry(self.target.add(dir)):
+                                        ct.build_foundry(self.target.add(dir))
+
+                                elif self.map[self.target.add(dir).y][self.target.add(dir).x][1] == EntityType.FOUNDRY:
+                                    pass    # build defences around harvester and splitter
+
+                            elif self.map[self.target.add(dir.rotate_left().rotate_left()).y][self.target.add(dir.rotate_left().rotate_left()).x][1] != EntityType.CORE and self.map[self.target.add(dir.rotate_left().rotate_left()).add(dir).y][self.target.add(dir.rotate_left().rotate_left()).add(dir).x][1] == EntityType.CORE:
+                                if self.map[self.target.add(dir.rotate_left().rotate_left()).y][self.target.add(dir.rotate_left().rotate_left()).x][1] != EntityType.FOUNDRY:
+
+                                    if self.pos.distance_squared(self.target.add(dir.rotate_left().rotate_left())) > 2:
+                                        temp = self.target
+                                        self.target = self.target.add(dir.rotate_left().rotate_left())
+                                        self.explore(ct)
+                                        self.target = temp
+                                    if ct.can_destroy(self.target.add(dir.rotate_left().rotate_left())):
+                                        ct.destroy(self.target.add(dir.rotate_left().rotate_left()))
+                                    if ct.can_build_foundry(self.target.add(dir.rotate_left().rotate_left())):
+                                        ct.build_foundry(self.target.add(dir.rotate_left().rotate_left()))
+
+                                elif self.map[self.target.add(dir.rotate_left()).y][self.target.add(dir.rotate_left()).x][1] == EntityType.FOUNDRY:
+                                    pass    # build defences around harvester and splitter
+
+                            elif self.map[self.target.add(dir.rotate_right().rotate_right()).y][self.target.add(dir.rotate_right().rotate_right()).x][1] != EntityType.CORE and self.map[self.target.add(dir.rotate_right().rotate_right()).add(dir).y][self.target.add(dir.rotate_right().rotate_right()).add(dir).x][1] == EntityType.CORE and self.map[self.target.add(dir.rotate_left().rotate_left()).y][self.target.add(dir.rotate_left().rotate_left()).x][1] != EntityType.FOUNDRY:
+                                if self.map[self.target.add(dir.rotate_right().rotate_right()).y][self.target.add(dir.rotate_right().rotate_right()).x][1] != EntityType.FOUNDRY:
+
+                                    if self.pos.distance_squared(self.target.add(dir.rotate_right().rotate_right())) > 2:
+                                        temp = self.target
+                                        self.target = self.target.add(dir.rotate_right().rotate_right())
+                                        self.explore(ct)
+                                        self.target = temp
+                                    if ct.can_destroy(self.target.add(dir.rotate_right().rotate_right())):
+                                        ct.destroy(self.target.add(dir.rotate_right().rotate_right()))
+                                    if ct.can_build_foundry(self.target.add(dir.rotate_right().rotate_right())):
+                                        ct.build_foundry(self.target.add(dir.rotate_right().rotate_right()))
+
+                                elif self.map[self.target.add(dir.rotate_right()).y][self.target.add(dir.rotate_right()).x][1] == EntityType.FOUNDRY:
+                                    pass    # build defences around harvester and splitter
+
+                        if self.marker_location != Position(1000, 1000) and self.map[self.target.y][self.target.x][1] == EntityType.SPLITTER and (self.map[self.target.add(ct.get_direction(ct.get_tile_building_id(self.target))).y][self.target.add(ct.get_direction(ct.get_tile_building_id(self.target))).x][1] == EntityType.FOUNDRY or self.map[self.target.add(ct.get_direction(ct.get_tile_building_id(self.target)).rotate_left().rotate_left()).y][self.target.add(ct.get_direction(ct.get_tile_building_id(self.target)).rotate_left().rotate_left()).x][1] == EntityType.FOUNDRY or self.map[self.target.add(ct.get_direction(ct.get_tile_building_id(self.target)).rotate_right()).y][self.target.add(ct.get_direction(ct.get_tile_building_id(self.target)).rotate_right()).x][1] == EntityType.FOUNDRY):  # Ensures marker gets destroyed
+                            if ct.can_destroy(self.marker_location):
+                                ct.destroy(self.marker_location)
+                                self.target = Position(1000, 1000)
+                                self.marker_location = Position(1000, 1000)
+                            else:
+                                temp = self.target
+                                self.target = self.marker_location
+                                self.explore(ct, self.marker_location)
+                                self.target = temp
+                        elif self.marker_location == Position(1000, 1000) and self.map[self.target.y][self.target.x][1] == EntityType.SPLITTER and (self.map[self.target.add(ct.get_direction(ct.get_tile_building_id(self.target))).y][self.target.add(ct.get_direction(ct.get_tile_building_id(self.target))).x][1] == EntityType.FOUNDRY or self.map[self.target.add(ct.get_direction(ct.get_tile_building_id(self.target)).rotate_left().rotate_left()).y][self.target.add(ct.get_direction(ct.get_tile_building_id(self.target)).rotate_left().rotate_left()).x][1] == EntityType.FOUNDRY or self.map[self.target.add(ct.get_direction(ct.get_tile_building_id(self.target)).rotate_right()).y][self.target.add(ct.get_direction(ct.get_tile_building_id(self.target)).rotate_right()).x][1] == EntityType.FOUNDRY):
+                            self.target = Position(1000, 1000)
+
+                    #else not enough money so wait
+                
+                if self.target == Position(1000, 1000) and self.marker_location == Position(1000, 1000):
+                    if len(self.tit) > 0 or len(self.ax) > 0:
+                        self.status = 2
+                    else:
+                        self.status = 1
