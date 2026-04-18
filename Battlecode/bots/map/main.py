@@ -49,7 +49,7 @@ class Player:
         self.closed = None
         self.open_heap = None
         self.ore_target = None  # Prevents constant changing of ore target
-        self.run_invalid_tiles = False
+        self.invalid_tiles = False
         self.mined_tit = [] # Tracks ores we have mined
         self.mined_ax = []
         self.enemy_mined_tit = []   # Tracks ores enemy has mined
@@ -1087,7 +1087,9 @@ class Player:
             ct.destroy(self.target)
             self.target = self.core_pos
         for d in STRAIGHTS:
-            if ct.can_build_gunner(self.target, d.opposite()) and ct.get_tile_building_id(self.target.add(d)) is not None and ct.get_entity_type(ct.get_tile_building_id(self.target.add(d))) in [EntityType.SPLITTER] and ct.can_build_gunner(self.target, d.opposite()):
+            if (ct.can_build_gunner(self.target, d.opposite()) and
+                    ( 0 < self.target.add(d).y < ct.get_map_height() or ct.get_tile_building_id(self.target.add(d)) is not None) and
+                    0 < self.target.add(d).x < ct.get_map_width() and ct.get_entity_type(ct.get_tile_building_id(self.target.add(d))) in [EntityType.SPLITTER]):
                 ct.build_gunner(self.target, d.opposite())
 
         if pos == self.target:
@@ -1137,7 +1139,7 @@ class Player:
             target = target.add(d)
             if not(0 < target.add(d).x < ct.get_map_width() and 0 < target.add(d).y < ct.get_map_height()):
                 break
-            if (ct.get_entity_type(ct.get_tile_builder_bot_id(target)) == EntityType.BUILDER_BOT and ct.get_team() != ct.get_team(ct.get_tile_builder_bot_id(target))) or ct.get_team(ct.get_tile_building_id(target)) not in [None, ct.get_team()]:
+            if (ct.get_entity_type(ct.get_tile_builder_bot_id(target)) == EntityType.BUILDER_BOT and ct.get_team() != ct.get_team(ct.get_tile_builder_bot_id(target))) or (ct.get_team(ct.get_tile_building_id(target)) not in [None, ct.get_team()] and ct.get_entity_type(ct.get_tile_building_id(target)) not in [EntityType.ROAD, EntityType.MARKER]):
                 if ct.can_fire(target):
                     ct.fire(target)
                 elif ct.get_ammo_amount()    < 2:
@@ -1590,8 +1592,6 @@ class Player:
                     #ct.draw_indicator_dot(self.pos, 0, 0, 0)
                 ct.draw_indicator_dot(self.enemy_core_pos, 255, 255, 0)
                 ct.draw_indicator_dot(self.core_pos, 0, 255, 255)
-                
-
 
             #for y in range(len(self.map)):
             #    for x in range(len(self.map[y])):
