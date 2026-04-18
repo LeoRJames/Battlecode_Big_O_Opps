@@ -1151,9 +1151,9 @@ class Player:
         for i in [target.add(d) for d in DIRECTIONS] + [target.add(d).add(d) for d in DIRECTIONS]:
             if i.x < 0 or i.x >= ct.get_map_width() or i.y<0 or i.y >= ct.get_map_height():
                 continue
-            if (ct.get_entity_type(ct.get_tile_builder_bot_id(i)) == EntityType.BUILDER_BOT and ct.get_team() != ct.get_team(ct.get_tile_builder_bot_id(i))) or ct.get_team(ct.get_tile_building_id(i)) != ct.get_team():
+            if (ct.get_entity_type(ct.get_tile_builder_bot_id(i)) == EntityType.BUILDER_BOT and ct.get_team() != ct.get_team(ct.get_tile_builder_bot_id(i))) or (ct.get_team(ct.get_tile_building_id(i)) != ct.get_team() and ct.get_entity_type(ct.get_tile_building_id(i)) not in [EntityType.ROAD, EntityType.MARKER]):
                 ct.draw_indicator_dot(i, 255, 0, 0)
-                if ct.can_rotate(target.direction_to(i)):
+                if ct.can_rotate(target.direction_to(i)) and ct.get_global_resources()[0] > 100:
                     ct.rotate(target.direction_to(i))
                     break
 
