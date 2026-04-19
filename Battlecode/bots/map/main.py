@@ -250,7 +250,7 @@ class Player:
     def heuristic_squaredEuclidean(self, next, target):
         return next.distance_squared(target)
 
-    def _neighbors_bridge(self, current, grid, width, height, unreachable, team, ct_pos, avoid):
+    def _neighbors_bridge(self, current, grid, width, height, unreachable, team, ct_pos, avoid, target):
 
         cx, cy = current
         results = []
@@ -290,7 +290,7 @@ class Player:
 
         return results
 
-    def _neighbors_conv(self, current, grid, width, height, unreachable, team, ct_pos, avoid):
+    def _neighbors_conv(self, current, grid, width, height, unreachable, team, ct_pos, avoid, target):
 
         cx, cy = current
         results = []
@@ -320,7 +320,7 @@ class Player:
 
         return results
 
-    def _neighbors_any(self, current, grid, width, height, unreachable, team, ct_pos, avoid):
+    def _neighbors_any(self, current, grid, width, height, unreachable, team, ct_pos, avoid, target):
 
         cx, cy = current
         results = []
@@ -338,7 +338,7 @@ class Player:
 
                 tile = grid[ny][nx]
 
-                if tile[0] == 0 or ((
+                if tile[0] == 0 or (target == (self.target.x, self.target.y) and tile == target and tile[1] == EntityType.HARVESTER and tile[2] != team and self.status == ATTACK_ENEMY_SUPPLY_LINES) or ((
                     not (tile[4] in [EntityType.BUILDER_BOT]
                         and ct_pos.distance_squared(Position(cx, cy)) <= 2)
                 ) and (
@@ -352,7 +352,7 @@ class Player:
 
         return results
 
-    def _neighbors_normal(self, current, grid, width, height, unreachable, team, ct_pos, avoid):
+    def _neighbors_normal(self, current, grid, width, height, unreachable, team, ct_pos, avoid, target):
 
         cx, cy = current
         results = []
@@ -499,7 +499,7 @@ class Player:
 
             for nx, ny in get_neighbors(
                 current, grid, width, height,
-                unreachable, team, ct_pos, avoid
+                unreachable, team, ct_pos, avoid, target
             ):
 
                 moveTile = 0
@@ -1193,6 +1193,12 @@ class Player:
                     ct.rotate(target.direction_to(i))
                     break
 
+    def exploring_the_map(self,  ct):
+        if self.target != Position(1000, 1000) and self.map[self.target.y][self.target.x][0] == 0:
+            self.explore(ct)
+        else:
+            CORNERS = ((0, 0))
+
     def exploring_the_map(self, ct):
         if self.target != Position(1000, 1000) and self.map[self.target.y][self.target.x][0] == 0:
             self.explore(ct)
@@ -1479,7 +1485,8 @@ class Player:
                     self.exploring_the_map(ct)
                     return
                 if self.target.distance_squared(self.pos) > 8:
-                    came_from, cost, best_tile = self.pathfinder(ct, self.target, any=True)
+                    self.explore(ct)
+                    '''came_from, cost, best_tile = self.pathfinder(ct, self.target, any=True)
                     if came_from == None:
                         return
                     path = self.reconstruct_path(came_from, best_tile)
@@ -1487,7 +1494,7 @@ class Player:
                         if ct.can_build_road(path[1]):
                             ct.build_road(path[1])
                         if ct.can_move(self.pos.direction_to(path[1])):
-                            ct.move(self.pos.direction_to(path[1]))
+                            ct.move(self.pos.direction_to(path[1]))'''
                 print(self.target)
                 target_tile = None
                 if self.target in self.enemy_mined_tit:
@@ -1498,13 +1505,15 @@ class Player:
                         dy = self.target.y + check[1]
                         pos = Position(dx, dy)
                         tile = self.map[dy][dx]
-                        if tile[0] != 0 and dx >= 0 and dx < len(self.map[0]) and dy >= 0 and dy < len(self.map) and pos not in self.unreachable_tiles and tile[0] != Environment.WALL and (tile[1] == None or (tile[2] == ct.get_team() and tile[1] in [EntityType.BARRIER, EntityType.ROAD])):
+                        if not (dx >= 0 and dx < len(self.map[0]) and dy >= 0 and dy < len(self.map) and pos not in self.unreachable_tiles and tile[0] != Environment.WALL and tile[0] != 0):
+                            continue
+                        if tile[1] == None or (tile[2] == ct.get_team() and tile[1] in [EntityType.BARRIER, EntityType.ROAD]):
                             target_tile = pos
                             break
                         # If an enemy supply line or road it can be used but continue checking for better tiles
-                        elif dx >= 0 and dx < len(self.map[0]) and dy >= 0 and dy < len(self.map) and pos not in self.unreachable_tiles and tile[0] != Environment.WALL and tile[1] in [EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.ROAD, EntityType.SPLITTER] and tile[2] != ct.get_team():
+                        elif tile[1] in [EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.ROAD, EntityType.SPLITTER] and tile[2] != ct.get_team():
                             target_tile = pos
-                        elif tile[0] != 0 and dx >= 0 and dx < len(self.map[0]) and dy >= 0 and dy < len(self.map) and tile[2] == ct.get_team() and tile[1] in [EntityType.SENTINEL, EntityType.GUNNER, EntityType.BREACH]:
+                        elif tile[2] == ct.get_team() and tile[1] in [EntityType.SENTINEL, EntityType.GUNNER, EntityType.BREACH]:
                             self.enemy_mined_tit.remove(self.enemy_mined_tit_target)
                             self.enemy_mined_tit_target = None
                             if len(self.enemy_mined_tit) == 0:
