@@ -57,6 +57,7 @@ class Player:
         self.enemy_mined_ax = []
         self.splitter_target = None
         self.enemy_mined_tit_target= None
+        self.attack_enemy_core_timer = 0
 
     def initialise_map(self, ct):   # Set up 2d array for each tile on map each storing a list of three info pieces (tile type, building, team)
         self.team = ct.get_team()
@@ -115,9 +116,9 @@ class Player:
                         pass
                     elif res != None and tile not in self.splitter_resource:    # If not recorded a resource
                         self.splitter_resource[tile] = res
-                    elif res != None and tile in self.splitter_resource and self.splitter_resource[tile] != res:    # If a different resource recorded through splitter
+                    elif tile in self.splitter_resource and (self.splitter_resource[tile] == True or (res != None  and self.splitter_resource[tile] != res)):    # If a different resource recorded through splitter
                         self.splitter_resource[tile] = True
-                        if self.status == DEFENCE:
+                        if self.status == DEFENCE and ct.get_global_resources()[0] > ct.get_foundry_cost()[0]:
                             self.status = FOUNDRY
                             self.target = tile
 
@@ -1040,6 +1041,12 @@ class Player:
                 if ct.can_destroy(self.target):
                     ct.destroy(self.target)
                 elif ct.can_fire(self.target):
+                    self.attack_enemy_core_timer += 1
+                    if self.attack_enemy_core_timer > 50:
+                        self.attack_enemy_core_timer = 0
+                        self.status = ATTACK_ENEMY_SUPPLY_LINES
+                        self.target = Position(1000, 1000)
+                        return
                     ct.fire(self.target)
                 if ct.get_entity_type(ct.get_tile_building_id(self.pos)) not in [EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.ROAD, EntityType.SPLITTER]:
                     print("Moving away")
@@ -1049,12 +1056,14 @@ class Player:
                             if self.target.distance_squared(self.enemy_core_pos) < 5 and ct.can_build_gunner(self.target, self.target.direction_to(self.enemy_core_pos)):
                                 print("WOAH")
                                 ct.build_gunner(self.target, self.target.direction_to(self.enemy_core_pos))
+                                self.attack_enemy_core_timer = 0
                             return
                 else:
                     return
 
             elif ct.get_position().distance_squared(self.target) < 4 and ct.can_build_gunner(self.target, self.target.direction_to(self.enemy_core_pos)):
                 ct.build_gunner(self.target, self.target.direction_to(self.enemy_core_pos))
+                self.attack_enemy_core_timer = 0
 
             if self.target != self.enemy_core_pos and not (self.pos.distance_squared(self.target) <= 2 and (ct.get_tile_building_id(self.target) == None or (ct.get_tile_building_id(self.target) != None and ct.get_team(ct.get_tile_building_id(self.target)) == self.team))):
                 self.explore(ct)
@@ -1093,11 +1102,12 @@ class Player:
                     building_targets = [i.add(ct.get_direction(ct.get_tile_building_id(i))), i.add(ct.get_direction(ct.get_tile_building_id(i)).rotate_left().rotate_left()), i.add(ct.get_direction(ct.get_tile_building_id(i)).rotate_right().rotate_right())]
                 elif ct.get_entity_type(ct.get_tile_building_id(i)) in [EntityType.FOUNDRY]:
                     building_targets = [i.add(Direction.NORTH), i.add(Direction.WEST), i.add(Direction.EAST), i.add(Direction.SOUTH)]
-                                  
+                elif self.pos.distance_squared(self.core_pos) <= 2 and ct.get_tile_building_id(i) != None and ct.get_entity_type(ct.get_tile_building_id(i)) in [EntityType.ROAD] and self.pos.distance_squared(i) <= 2 and ct.get_team(ct.get_tile_building_id(i)) == self.team:
+                    self.target = i
                 if building_targets != None:
                     for building_target in building_targets:
                         
-                        if building_target.x >= 0 and building_target.x < len(self.map[0]) and building_target.y >= 0 and building_target.y < len(self.map) and ct.is_in_vision(building_target) and ct.get_entity_type(ct.get_tile_building_id(building_target)) not in [EntityType.CORE, EntityType.SPLITTER, EntityType.GUNNER, EntityType.HARVESTER, EntityType.SENTINEL, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.FOUNDRY] and ct.get_tile_env(building_target) != Environment.WALL:
+                        if building_target.x >= 0 and building_target.x < len(self.map[0]) and building_target.y >= 0 and building_target.y < len(self.map) and ct.is_in_vision(building_target) and ct.get_entity_type(ct.get_tile_building_id(building_target)) not in [EntityType.CORE, EntityType.SPLITTER, EntityType.HARVESTER, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.FOUNDRY] and ct.get_tile_env(building_target) != Environment.WALL:
                             if building_target.distance_squared(pos) < self.target.distance_squared(pos) or self.target == self.core_pos:
                                 self.target = building_target
                                 print(self.target)
@@ -1115,7 +1125,7 @@ class Player:
         if self.pos.distance_squared(self.target) > 2:
             self.explore(ct)
 
-        elif ct.can_heal(self.target):
+        elif ct.can_heal(self.target) and ct.get_entity_type(ct.get_tile_building_id(self.target)) != EntityType.ROAD:
             print("Healing")
             ct.heal(self.target)
             return
@@ -1123,7 +1133,13 @@ class Player:
             ct.destroy(self.target)
             self.target = self.core_pos
         for d in STRAIGHTS:
-            if (ct.can_build_gunner(self.target, d.opposite()) and
+            if ct.get_entity_type(ct.get_tile_building_id(self.target)) == EntityType.GUNNER and ct.can_destroy(self.target) and ct.get_sentinel_cost()[0] <= ct.get_global_resources()[0]:
+                ct.destroy(self.target)
+            if (ct.can_build_sentinel(self.target, self.target.direction_to(self.core_pos).opposite()) and
+                    ( 0 < self.target.add(d).y < ct.get_map_height() or ct.get_tile_building_id(self.target.add(d)) is not None) and
+                    0 < self.target.add(d).x < ct.get_map_width() and ct.get_entity_type(ct.get_tile_building_id(self.target.add(d))) in [EntityType.SPLITTER, EntityType.FOUNDRY]):
+                ct.build_sentinel(self.target, self.target.direction_to(self.core_pos).opposite())
+            elif (ct.can_build_gunner(self.target, d.opposite()) and
                     ( 0 < self.target.add(d).y < ct.get_map_height() or ct.get_tile_building_id(self.target.add(d)) is not None) and
                     0 < self.target.add(d).x < ct.get_map_width() and ct.get_entity_type(ct.get_tile_building_id(self.target.add(d))) in [EntityType.SPLITTER, EntityType.FOUNDRY]):
                 ct.build_gunner(self.target, d.opposite())
@@ -1193,11 +1209,11 @@ class Player:
                     ct.rotate(target.direction_to(i))
                     break
 
-    def exploring_the_map(self,  ct):
+    '''def exploring_the_map(self,  ct):
         if self.target != Position(1000, 1000) and self.map[self.target.y][self.target.x][0] == 0:
             self.explore(ct)
         else:
-            CORNERS = ((0, 0))
+            CORNERS = ((0, 0))'''
 
     def exploring_the_map(self, ct):
         if self.target != Position(1000, 1000) and self.map[self.target.y][self.target.x][0] == 0:
@@ -1361,7 +1377,7 @@ class Player:
                         break
 
             # Extra bots to attack enemy core
-            elif self.enemy_core_pos != Position(1000, 1000) and self.num_spawned < 20: # need a better check
+            elif self.enemy_core_pos != Position(1000, 1000) and (self.num_spawned < 14 or (self.num_spawned < 20 and ct.get_global_resources()[0] > 1000)): # need a better check
                 if ct.get_global_resources()[0] < ct.get_builder_bot_cost()[0]:
                     print("Waiting for resources to spawn builder bot")
                     return
@@ -1607,6 +1623,13 @@ class Player:
                             self.target = chosen_tile
                         
                     else:
+                        if self.pos == self.target:
+                            for d in DIRECTIONS:
+                                if ct.can_build_road(self.pos.add(d)):
+                                    ct.build_road(self.pos.add(d))
+                                if ct.can_move(d):
+                                    ct.move(d)
+                                    break
                         if self.map[self.target.y][self.target.x][1] == EntityType.FOUNDRY:
                             self.splitter_resource[self.splitter_target] = False
                             self.splitter_target = None
