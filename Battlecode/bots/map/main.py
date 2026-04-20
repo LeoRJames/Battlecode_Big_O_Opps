@@ -351,7 +351,7 @@ class Player:
                     tile[1] in [EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE,
                                 EntityType.CONVEYOR, EntityType.MARKER,
                                 EntityType.ROAD, EntityType.SPLITTER]
-                    or (tile[1] == EntityType.CORE and (tile[2] == team or (tile[2] != team and self.status == ATTACK_ENEMY_CORE)))
+                    or (tile[1] == EntityType.CORE and (tile[2] == team or (tile[2] != team and self.status == ATTACK_ENEMY_CORE and target[0] != 1000 and grid[target[1]][target[0]][1] == EntityType.CORE)))
                     or (tile[1] is None and tile[0] != Environment.WALL)
                 )):
                     results.append((nx, ny))
@@ -996,42 +996,67 @@ class Player:
         if ct.get_current_round() > 200:
             self.status = EXPLORING
 
-    def attack_enemy_core(self, ct):
+    def attack_enemy_core(self, ct, close=True):
         pos = self.pos
         vision_tiles = ct.get_nearby_tiles()
         list_of_gunners = []
-        if self.target == Position(1000, 1000):
-            self.target = self.enemy_core_pos
+        self.target = self.enemy_core_pos
         if self.pos.distance_squared(self.enemy_core_pos) <= 32:
             for i in vision_tiles:
                 if self.map[i.y][i.x][1] in [EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR]:
                     if self.map[i.y][i.x][1] == EntityType.BRIDGE:
                         building_target = ct.get_bridge_target(ct.get_tile_building_id(i))
-                        print("found_one")
                         if building_target in vision_tiles:
                             target_type = ct.get_entity_type(ct.get_tile_building_id(building_target))
-                            if (target_type in NON_PASSABLE or target_type == EntityType.CORE) or ct.get_tile_builder_bot_id(building_target) != None:
-                                print("target")
-                                building_target = i
+                            target_team = ct.get_team(ct.get_tile_building_id(building_target))
+                            if target_type in [EntityType.GUNNER, EntityType.SENTINEL] and target_team == self.team:
+                                building_target = None
+                                continue
+                            elif target_type in NON_PASSABLE or target_type == EntityType.CORE or (ct.get_tile_builder_bot_id(building_target) != None and pos != building_target):
+                                if ct.get_tile_builder_bot_id(i) == None or pos == building_target:
+                                    building_target = i
+                                else:
+                                    building_target = None
+                                    continue
                     else:
                         building_target = i.add(ct.get_direction(ct.get_tile_building_id(i)))
-                        print("found_one")
                         if building_target in vision_tiles:
                             target_type = ct.get_entity_type(ct.get_tile_building_id(building_target))
-                            if (target_type in NON_PASSABLE or target_type == EntityType.CORE) or ct.get_tile_builder_bot_id(building_target) != None:
-                                print("target")
-                                building_target = i
+                            target_team = ct.get_team(ct.get_tile_building_id(building_target))
+                            if target_type in [EntityType.GUNNER, EntityType.SENTINEL] and target_team == self.team:
+                                building_target = None
+                                continue
+                            elif target_type in NON_PASSABLE or target_type == EntityType.CORE or (ct.get_tile_builder_bot_id(building_target) != None and pos != building_target):
+                                if ct.get_tile_builder_bot_id(i) == None or pos == building_target:
+                                    building_target = i
+                                else:
+                                    building_target = None
+                                    continue
 
-                    if ct.is_in_vision(building_target) and ct.get_tile_builder_bot_id(building_target) == None and (ct.is_tile_passable(building_target) or building_target == pos or ct.get_tile_building_id(building_target) is None) and building_target.distance_squared(self.enemy_core_pos) <= 32:
-                       if building_target.distance_squared(self.enemy_core_pos) < self.target.distance_squared(self.enemy_core_pos) or self.target == self.enemy_core_pos:
+                    if building_target != None and ct.is_in_vision(building_target) and (ct.get_tile_builder_bot_id(building_target) == None or pos == building_target) and (ct.is_tile_passable(building_target) or building_target == pos or ct.get_tile_building_id(building_target) is None) and building_target.distance_squared(self.enemy_core_pos) <= 32:
+                       if (close and building_target.distance_squared(self.enemy_core_pos) < self.target.distance_squared(self.enemy_core_pos)) or (not close and building_target.distance_squared(self.enemy_core_pos) > self.target.distance_squared(self.enemy_core_pos)) or self.target == self.enemy_core_pos:
                             self.target = building_target
                             print(self.target)
 
                 elif self.map[i.y][i.x][1] in [EntityType.SPLITTER]:
                     splitter_outs = [i.add(ct.get_direction(ct.get_tile_building_id(i))), i.add(ct.get_direction(ct.get_tile_building_id(i)).rotate_left().rotate_left()), i.add(ct.get_direction(ct.get_tile_building_id(i)).rotate_right().rotate_right())]
                     for building_target in splitter_outs:
-                        if ct.is_in_vision(building_target) and self.map[building_target.y][building_target.x][0] != Environment.WALL and (ct.is_tile_passable(building_target) or building_target == pos or ct.get_tile_building_id(building_target) is None) and building_target.distance_squared(self.enemy_core_pos) <= 32:
-                            if building_target.distance_squared(pos) < self.target.distance_squared(pos):
+                        if building_target not in ct.get_nearby_tiles():
+                            continue
+                        target_type = ct.get_entity_type(ct.get_tile_building_id(building_target))
+                        target_team = ct.get_team(ct.get_tile_building_id(building_target))
+                        if target_type in [EntityType.GUNNER, EntityType.SENTINEL] and target_team == self.team:
+                            building_target = None
+                            continue
+                        elif target_type in NON_PASSABLE or target_type == EntityType.CORE or (ct.get_tile_builder_bot_id(building_target) != None and pos != building_target):
+                            if ct.get_tile_builder_bot_id(i) == None or pos == building_target:
+                                    building_target = i
+                            else:
+                                building_target = None
+                                continue
+                        if building_target != None and ct.is_in_vision(building_target) and (ct.get_tile_builder_bot_id(building_target) == None or pos == building_target) and self.map[building_target.y][building_target.x][0] != Environment.WALL and (ct.is_tile_passable(building_target) or building_target == pos or ct.get_tile_building_id(building_target) is None) and building_target.distance_squared(self.enemy_core_pos) <= 32:
+                            
+                            if (close and building_target.distance_squared(self.enemy_core_pos) < self.target.distance_squared(self.enemy_core_pos)) or (not close and building_target.distance_squared(self.enemy_core_pos) > self.target.distance_squared(self.enemy_core_pos)) or self.target == self.enemy_core_pos:
                                 self.target = building_target
 
                 elif ct.get_entity_type(ct.get_tile_building_id(i)) in [EntityType.GUNNER]:
@@ -1053,7 +1078,7 @@ class Player:
                                 print(building_target)
                                 self.target = building_target
             '''
-            if 0 < self.pos.distance_squared(self.target) <= 2:
+            if 0 < self.pos.distance_squared(self.target) <= 2 and self.map[self.target.y][self.target.x][1] not in [EntityType.SENTINEL, EntityType.GUNNER]:
                 if ct.can_destroy(self.target):
                     ct.destroy(self.target)
             if self.pos == self.target:
