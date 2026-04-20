@@ -59,6 +59,7 @@ class Player:
         self.splitter_target = None
         self.enemy_mined_tit_target= None
         self.attack_enemy_core_timer = 0
+        self.attack_enemy_core_close = True
 
     def initialise_map(self, ct):   # Set up 2d array for each tile on map each storing a list of three info pieces (tile type, building, team)
         self.team = ct.get_team()
@@ -598,7 +599,9 @@ class Player:
                         self.status = FIND_ENEMY_CORE
 
                     # Update known location of enemy core
-                    elif marker_status == 2:
+                    elif marker_status == 2 or 4:
+                        if marker_status == 4:
+                            self.attack_enemy_core_close = False
                         self.enemy_core_pos = Position(target_x, target_y)
                         print(marker_value, i)
                         print(marker_status, marker_value_id, target_x, target_y, self.id)
@@ -996,12 +999,14 @@ class Player:
         if ct.get_current_round() > 200:
             self.status = EXPLORING
 
-    def attack_enemy_core(self, ct, close=True):
+    def attack_enemy_core(self, ct, close=None):
+        if close == None:
+            close = self.attack_enemy_core_close
         pos = self.pos
         vision_tiles = ct.get_nearby_tiles()
         list_of_gunners = []
         self.target = self.enemy_core_pos
-        if self.pos.distance_squared(self.enemy_core_pos) <= 32:
+        if self.pos.distance_squared(self.enemy_core_pos) <= 40:
             for i in vision_tiles:
                 if self.map[i.y][i.x][1] in [EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR]:
                     if self.map[i.y][i.x][1] == EntityType.BRIDGE:
@@ -1013,7 +1018,7 @@ class Player:
                                 building_target = None
                                 continue
                             elif target_type in NON_PASSABLE or target_type == EntityType.CORE or (ct.get_tile_builder_bot_id(building_target) != None and pos != building_target):
-                                if ct.get_tile_builder_bot_id(i) == None or pos == building_target:
+                                if ct.get_tile_builder_bot_id(i) == None or pos == i:
                                     building_target = i
                                 else:
                                     building_target = None
@@ -1027,7 +1032,7 @@ class Player:
                                 building_target = None
                                 continue
                             elif target_type in NON_PASSABLE or target_type == EntityType.CORE or (ct.get_tile_builder_bot_id(building_target) != None and pos != building_target):
-                                if ct.get_tile_builder_bot_id(i) == None or pos == building_target:
+                                if ct.get_tile_builder_bot_id(i) == None or pos == i:
                                     building_target = i
                                 else:
                                     building_target = None
@@ -1049,7 +1054,7 @@ class Player:
                             building_target = None
                             continue
                         elif target_type in NON_PASSABLE or target_type == EntityType.CORE or (ct.get_tile_builder_bot_id(building_target) != None and pos != building_target):
-                            if ct.get_tile_builder_bot_id(i) == None or pos == building_target:
+                            if ct.get_tile_builder_bot_id(i) == None or pos == i:
                                     building_target = i
                             else:
                                 building_target = None
@@ -1088,8 +1093,7 @@ class Player:
                     self.attack_enemy_core_timer += 1
                     if self.attack_enemy_core_timer > 50:
                         self.attack_enemy_core_timer = 0
-                        self.status = ATTACK_ENEMY_SUPPLY_LINES
-                        self.target = Position(1000, 1000)
+                        self.attack_enemy_core_close = False
                         return
                     ct.fire(self.target)
                 if ct.get_entity_type(ct.get_tile_building_id(self.pos)) not in [EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.ROAD, EntityType.SPLITTER]:
@@ -1188,13 +1192,13 @@ class Player:
             for d in STRAIGHTS:
                 if ct.get_entity_type(ct.get_tile_building_id(self.target)) == EntityType.GUNNER and ct.can_destroy(self.target) and ct.get_sentinel_cost()[0] <= ct.get_global_resources()[0]:
                     ct.destroy(self.target)
-                if (ct.can_build_sentinel(self.target, self.target.direction_to(self.core_pos).opposite()) and
-                        ( 0 < self.target.add(d).y < ct.get_map_height() or ct.get_tile_building_id(self.target.add(d)) is not None) and
-                        0 < self.target.add(d).x < ct.get_map_width() and ct.get_entity_type(ct.get_tile_building_id(self.target.add(d))) in [EntityType.SPLITTER, EntityType.FOUNDRY]):
+                if (( 0 < self.target.add(d).y < ct.get_map_height() and ct.get_tile_building_id(self.target.add(d)) is not None) and
+                        0 < self.target.add(d).x < ct.get_map_width() and ct.get_entity_type(ct.get_tile_building_id(self.target.add(d))) in [EntityType.SPLITTER, EntityType.FOUNDRY] and 
+                        ct.can_build_sentinel(self.target, self.target.direction_to(self.core_pos).opposite())):
                     ct.build_sentinel(self.target, self.target.direction_to(self.core_pos).opposite())
-                elif (ct.can_build_gunner(self.target, d.opposite()) and
-                        ( 0 < self.target.add(d).y < ct.get_map_height() or ct.get_tile_building_id(self.target.add(d)) is not None) and
-                        0 < self.target.add(d).x < ct.get_map_width() and ct.get_entity_type(ct.get_tile_building_id(self.target.add(d))) in [EntityType.SPLITTER, EntityType.FOUNDRY]):
+                elif (( 0 < self.target.add(d).y < ct.get_map_height() and ct.get_tile_building_id(self.target.add(d)) is not None) and 
+                        (0 < self.target.add(d).x < ct.get_map_width() and ct.get_entity_type(ct.get_tile_building_id(self.target.add(d))) in [EntityType.SPLITTER, EntityType.FOUNDRY]) and 
+                        ct.can_build_gunner(self.target, d.opposite())):
                     ct.build_gunner(self.target, d.opposite())
 
         if pos == self.target:
@@ -1364,37 +1368,6 @@ class Player:
                             ct.place_marker(i, message)
                             break
 
-                '''for tile in ct.get_nearby_tiles():
-                if ct.get_entity_type(ct.get_tile_building_id(tile)) in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR] and self.pos.distance_squared(tile) <= 5:
-                    stored_res = ct.get_stored_resource(ct.get_tile_building_id(tile))
-                    if stored_res != None and tile not in self.core_stored_resource:        # Adds new conveyors
-                        self.core_stored_resource[tile] = stored_res
-                    elif stored_res != None and self.core_stored_resource[tile] != stored_res and self.core_stored_resource[tile] != None:
-                        self.core_stored_resource[tile] = None      # Indicates valid place for foundry
-                        marker_status = 5   # Set up foundry
-                        message = (
-                                marker_status * (2**28)     # Assumes marker never destroyed
-                                + ct.get_current_round() * (2**12)  # Uses this to decide whether it should just build a new bot
-                                + tile.x * (2**6)
-                                + tile.y)
-                        for i in ct.get_nearby_tiles():
-                            if ct.is_tile_empty(i) and ct.can_place_marker(i):
-                                ct.place_marker(i, message)
-                        break
-                elif ct.get_entity_type(ct.get_tile_building_id(tile)) == EntityType.MARKER:
-                    round = self.initialise_builder_bot(ct)
-                    if self.status == 5:
-                        if ct.get_entity_type(ct.get_tile_building_id(self.target)) not in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR]:
-                            self.status = 0
-                            self.target = Position(1000, 1000)
-                        elif ct.get_current_round() >= 100 + round and ct.get_current_round() != 101 + round:  # Builds a new bot if founder not built in 100 rounds
-                            if ct.can_spawn(self.pos.add(self.pos.direction_to(tile))):
-                                ct.spawn_builder(self.pos.add(self.pos.direction_to(tile)))
-                                self.num_spawned += 1
-                else:
-                    if tile in self.core_stored_resource:
-                        del self.core_stored_resource[tile]     # Removes tiles that previously had conveyors but do not anymore'''
-
             # Bots to do healing
             elif ct.get_hp() < 500 or self.num_spawned < 5:
                 print("Healing bots")
@@ -1439,7 +1412,10 @@ class Player:
                         ct.spawn_builder(spawn_pos)
                         # Place marker, so bot knows where to go
                         bot_id = ct.get_tile_builder_bot_id(spawn_pos)
-                        marker_status = 2   # Defence bot
+                        if self.num_spawned < 13:
+                            marker_status = 2   # Defence bot
+                        else:
+                            marker_status = 4
                         message = (
                                 marker_status * (2**28)
                                 + bot_id * (2**12)
@@ -1534,7 +1510,7 @@ class Player:
 
             elif self.status == ATTACK_ENEMY_CORE:
                 print("Attacking Enemy Core")
-                if self.enemy_core_pos.distance_squared(self.pos) > 25:
+                if self.enemy_core_pos.distance_squared(self.pos) > 40:
                     self.target = self.enemy_core_pos
                     self.explore(ct)
                     return
