@@ -1226,12 +1226,12 @@ class Player:
             for d in STRAIGHTS:
                 if ct.get_entity_type(ct.get_tile_building_id(self.target)) == EntityType.GUNNER and ct.can_destroy(self.target) and ct.get_sentinel_cost()[0] <= ct.get_global_resources()[0]:
                     ct.destroy(self.target)
-                if (( 0 < self.target.add(d).y < ct.get_map_height() and ct.get_tile_building_id(self.target.add(d)) is not None) and
-                        0 < self.target.add(d).x < ct.get_map_width() and ct.get_entity_type(ct.get_tile_building_id(self.target.add(d))) in [EntityType.SPLITTER, EntityType.FOUNDRY] and 
+                if ( 0 <= self.target.add(d).y < ct.get_map_height() and 0 <= self.target.add(d).x < ct.get_map_width() and ct.get_tile_building_id(self.target.add(d)) is not None and
+                        ct.get_entity_type(ct.get_tile_building_id(self.target.add(d))) in [EntityType.SPLITTER, EntityType.FOUNDRY] and 
                         ct.can_build_sentinel(self.target, self.target.direction_to(self.core_pos).opposite())):
                     ct.build_sentinel(self.target, self.target.direction_to(self.core_pos).opposite())
-                elif (( 0 < self.target.add(d).y < ct.get_map_height() and ct.get_tile_building_id(self.target.add(d)) is not None) and 
-                        (0 < self.target.add(d).x < ct.get_map_width() and ct.get_entity_type(ct.get_tile_building_id(self.target.add(d))) in [EntityType.SPLITTER, EntityType.FOUNDRY]) and 
+                elif ( 0 <= self.target.add(d).y < ct.get_map_height() and 0 <= self.target.add(d).x < ct.get_map_width() and ct.get_tile_building_id(self.target.add(d)) is not None and 
+                        ct.get_entity_type(ct.get_tile_building_id(self.target.add(d))) in [EntityType.SPLITTER, EntityType.FOUNDRY] and 
                         ct.can_build_gunner(self.target, d.opposite())):
                     ct.build_gunner(self.target, d.opposite())
 
