@@ -60,6 +60,8 @@ class Player:
         self.enemy_mined_tit_target= None
         self.attack_enemy_core_timer = 0
         self.attack_enemy_core_close = True
+        self.extra_spawned = 0
+        self.temp_counter = 0
 
     def initialise_map(self, ct):   # Set up 2d array for each tile on map each storing a list of three info pieces (tile type, building, team)
         self.team = ct.get_team()
@@ -627,13 +629,13 @@ class Player:
                         self.status = FIND_ENEMY_CORE
 
                     # Update known location of enemy core
-                    elif marker_status == 2 or 4:
-                        if marker_status == 4:
-                            self.attack_enemy_core_close = False
+                    elif marker_status == 2 or marker_status == 4:
                         self.enemy_core_pos = Position(target_x, target_y)
                         print(marker_value, i)
                         print(marker_status, marker_value_id, target_x, target_y, self.id)
                         if marker_value_id == self.id:
+                            if marker_status == 4:
+                                self.attack_enemy_core_close = False
                             self.target = self.enemy_core_pos
                             self.status = ATTACK_ENEMY_CORE
                             return
@@ -642,6 +644,10 @@ class Player:
                         if marker_value_id == self.id:
                             self.target = self.enemy_core_pos
                             self.status = ATTACK_ENEMY_SUPPLY_LINES
+                            return
+                    elif marker_status == 5:
+                        if marker_value_id == self.id:
+                            self.status = MINING_TITANIUM
                             return
                 #else:
                 #    if marker_status == 5 and not self.built_harvester[0]:
@@ -1034,7 +1040,7 @@ class Player:
         vision_tiles = ct.get_nearby_tiles()
         list_of_gunners = []
         self.target = self.enemy_core_pos
-        if self.pos.distance_squared(self.enemy_core_pos) <= 40:
+        if self.pos.distance_squared(self.enemy_core_pos) <= 50:
             for i in vision_tiles:
                 if self.map[i.y][i.x][1] in [EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR]:
                     if self.map[i.y][i.x][1] == EntityType.BRIDGE:
@@ -1377,7 +1383,8 @@ class Player:
             self.update_map(ct)
 
             # Inital 3 bots to find enemy core location
-            if self.num_spawned < 3:
+            if self.temp_counter < 3 and (self.num_spawned < 3 or (self.enemy_core_pos == Position(1000, 1000) and ct.get_current_round() > 500 and ct.get_global_resources()[0] > 500)):
+                
                 possible_core_locations = [
                     [ct.get_map_width() - 1 - self.core_pos.x, self.core_pos.y],  # Horizontal Flip
                     [self.core_pos.x, ct.get_map_height() - 1 - self.core_pos.y],  # Vertical Flip
@@ -1394,13 +1401,39 @@ class Player:
                     message = (
                             marker_status * (2**28)
                             + bot_id * (2**12)
-                            + possible_core_locations[self.num_spawned][0] * (2**6)
-                            + possible_core_locations[self.num_spawned][1])
-                    self.num_spawned += 1
+                            + possible_core_locations[self.temp_counter][0] * (2**6)
+                            + possible_core_locations[self.temp_counter][1])
+                    self.temp_counter += 1
+                    if self.temp_counter == 3:
+                        self.temp_counter = 0
+                    if self.num_spawned < 3:
+                        self.num_spawned += 1
+                    else:
+                        self.extra_spawned += 1
                     for i in ct.get_nearby_tiles(6):    # Will sometimes cause errors where builder bot cannot move to tile where marker was placed and destroy it
                         if ct.can_place_marker(i) and ct.is_tile_empty(i):
                             ct.place_marker(i, message)
                             break
+
+            elif self.enemy_core_pos == Position(1000, 1000) and self.extra_spawned < 1 and self.num_spawned >= 3 and ct.get_builder_bot_cost()[0] < ct.get_global_resources()[0] < 500 and len(self.map[0]) >= 25 and len(self.map) >= 25:
+                for spawn_pos in ct.get_nearby_tiles(8):
+                    if ct.can_spawn(spawn_pos):
+                        ct.spawn_builder(spawn_pos)
+                        # Place marker, so bot knows where to go
+                        bot_id = ct.get_tile_builder_bot_id(spawn_pos)
+                        marker_status = 5   # Defence bot
+                        message = (
+                                marker_status * (2**28)
+                                + bot_id * (2**12)
+                                + 0 * (2 ** 6)
+                                + 0)
+
+                        self.extra_spawned += 1
+                        for i in ct.get_nearby_tiles(7):
+                            ct.draw_indicator_dot(i,200,200,200)
+                            if ct.can_place_marker(i) and ct.is_tile_empty(i):
+                                ct.place_marker(i, message)
+                        break
 
             # Bots to do healing
             elif ct.get_hp() < 500 or self.num_spawned < 5:
@@ -1409,11 +1442,12 @@ class Player:
                 for i in core_tiles:
                     if ct.can_spawn(i):
                         ct.spawn_builder(i)
-                        self.num_spawned += 1
+                        if self.num_spawned < 5:
+                            self.num_spawned += 1
                         break
 
             # Bots to attack supply lines
-            elif self.enemy_core_pos != Position(1000, 1000) and 9 <= self.num_spawned < 13: # 10 <= ...
+            elif self.enemy_core_pos != Position(1000, 1000) and ct.get_global_resources()[0] > 500 and (9 <= self.num_spawned < 13 or (20 <= self.num_spawned <= 30 and self.num_spawned % 2 == 0 and ct.get_global_resources()[0] > 1500)):
                 if ct.get_global_resources()[0] < ct.get_builder_bot_cost()[0]:
                     print("Waiting for resources to spawn builder bot")
                     return
@@ -1437,7 +1471,7 @@ class Player:
                         break
 
             # Extra bots to attack enemy core
-            elif self.enemy_core_pos != Position(1000, 1000) and (self.num_spawned < 13 or (self.num_spawned < 20 and ct.get_global_resources()[0] > 1000)): # need a better check
+            elif self.enemy_core_pos != Position(1000, 1000) and ct.get_global_resources()[0] > 500 and (self.num_spawned < 13 or (self.num_spawned <= 20 and ct.get_global_resources()[0] > 1000) or (20 <= self.num_spawned <= 30 and self.num_spawned % 2 == 1 and ct.get_global_resources()[0] > 1500)):
                 if ct.get_global_resources()[0] < ct.get_builder_bot_cost()[0]:
                     print("Waiting for resources to spawn builder bot")
                     return
@@ -1544,7 +1578,7 @@ class Player:
 
             elif self.status == ATTACK_ENEMY_CORE:
                 print("Attacking Enemy Core")
-                if self.enemy_core_pos.distance_squared(self.pos) > 40:
+                if self.enemy_core_pos.distance_squared(self.pos) > 50:
                     self.target = self.enemy_core_pos
                     self.explore(ct)
                     return
