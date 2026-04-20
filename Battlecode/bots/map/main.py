@@ -177,6 +177,34 @@ class Player:
         post_update_map_time = ct.get_cpu_time_elapsed()
         print(f"Map Update Time: {post_update_map_time - pre_update_map_time} ({(post_update_map_time - pre_update_map_time) / 69:.1f})")
 
+    def simple_supply_connectivity(self, ct, start=None):
+        if start is None:
+            start = self.pos
+        next_tile = start
+        end = None
+        own_team = False
+        count = 0
+        while count < 10:
+            building = self.map[next_tile.y][next_tile.x][1]
+            team = self.map[next_tile.y][next_tile.x][2]
+            print(next_tile, building, team)
+            if building in [0, None, EntityType.HARVESTER, EntityType.ROAD, EntityType.LAUNCHER, EntityType.MARKER, EntityType.BARRIER]:    # Useless end point
+                end = None
+                break
+            elif building in [EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR, EntityType.SPLITTER]:    # Continue in direction of conveyor
+                next_tile = next_tile.add(self.map[next_tile.y][next_tile.x][3][0])
+            elif building is EntityType.BRIDGE:    # Continue to end point of bridge
+                next_tile = self.map[next_tile.y][next_tile.x][3][0]
+            elif building in [EntityType.CORE, EntityType.BREACH, EntityType.GUNNER, EntityType.SENTINEL, EntityType.FOUNDRY]:    # Valid end point
+                end = building
+                if team == self.team:
+                    own_team = True
+                break
+            else:
+                break
+            count += 1
+        return end, own_team
+
     def supply_connectivity(self, ct, start=None, check_back=True, visited=False):  # ITERATIVE FOR EACH PATH
         if start is None:
             start = self.pos
@@ -1040,8 +1068,9 @@ class Player:
 
                     if building_target != None and ct.is_in_vision(building_target) and (ct.get_tile_builder_bot_id(building_target) == None or pos == building_target) and (ct.is_tile_passable(building_target) or building_target == pos or ct.get_tile_building_id(building_target) is None) and building_target.distance_squared(self.enemy_core_pos) <= 32:
                        if (close and building_target.distance_squared(self.enemy_core_pos) < self.target.distance_squared(self.enemy_core_pos)) or (not close and building_target.distance_squared(self.enemy_core_pos) > self.target.distance_squared(self.enemy_core_pos)) or self.target == self.enemy_core_pos:
-                            self.target = building_target
-                            print(self.target)
+                            end, own_team = self.simple_supply_connectivity(ct, building_target)
+                            if not (end != None and own_team == self.team):
+                                self.target = building_target
 
                 elif self.map[i.y][i.x][1] in [EntityType.SPLITTER]:
                     splitter_outs = [i.add(ct.get_direction(ct.get_tile_building_id(i))), i.add(ct.get_direction(ct.get_tile_building_id(i)).rotate_left().rotate_left()), i.add(ct.get_direction(ct.get_tile_building_id(i)).rotate_right().rotate_right())]
@@ -1062,7 +1091,9 @@ class Player:
                         if building_target != None and ct.is_in_vision(building_target) and (ct.get_tile_builder_bot_id(building_target) == None or pos == building_target) and self.map[building_target.y][building_target.x][0] != Environment.WALL and (ct.is_tile_passable(building_target) or building_target == pos or ct.get_tile_building_id(building_target) is None) and building_target.distance_squared(self.enemy_core_pos) <= 32:
                             
                             if (close and building_target.distance_squared(self.enemy_core_pos) < self.target.distance_squared(self.enemy_core_pos)) or (not close and building_target.distance_squared(self.enemy_core_pos) > self.target.distance_squared(self.enemy_core_pos)) or self.target == self.enemy_core_pos:
-                                self.target = building_target
+                                end, own_team = self.simple_supply_connectivity(ct, building_target)
+                                if not (end != None and own_team == self.team):
+                                    self.target = building_target
 
                 elif ct.get_entity_type(ct.get_tile_building_id(i)) in [EntityType.GUNNER]:
                     list_of_gunners.append(i)
@@ -1093,7 +1124,10 @@ class Player:
                     self.attack_enemy_core_timer += 1
                     if self.attack_enemy_core_timer > 50:
                         self.attack_enemy_core_timer = 0
-                        self.attack_enemy_core_close = False
+                        if self.attack_enemy_core_close:
+                            self.attack_enemy_core_close = False
+                        else:
+                            self.attack_enemy_core_close = True
                         return
                     ct.fire(self.target)
                 if ct.get_entity_type(ct.get_tile_building_id(self.pos)) not in [EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.ROAD, EntityType.SPLITTER]:
@@ -1745,7 +1779,9 @@ class Player:
                     target = tile
                     break
                 elif team != self.team and building != EntityType.HARVESTER and not (bot != None and ct.get_team(ct.get_tile_builder_bot_id(tile)) == self.team):     # Then enemy buildings
-                    target = tile
+                    end, own_team = self.simple_supply_connectivity(ct, tile)
+                    if not (end != None and own_team == self.team):
+                        target = tile
                 elif bot != None and target == None and ct.get_team(ct.get_tile_builder_bot_id(tile)) != self.team:   # Then enemy builder bots
                     target = tile
             if target != None:
