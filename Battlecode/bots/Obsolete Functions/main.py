@@ -658,3 +658,79 @@ elif self.status == 5:  # Build foundry
                         self.status = 2
                     else:
                         self.status = 1
+
+def defence(self, ct):
+        print("DEFENCE")
+        if ct.is_in_vision(self.core_pos) and ct.get_hp(ct.get_tile_building_id(self.core_pos)) < 500:
+            self.target = self.core_pos
+            if ct.can_heal(self.core_pos):
+                ct.heal(self.core_pos)
+            # Get back to core to heal
+            if self.map[self.pos.y][self.pos.x][1] != EntityType.CORE:
+                self.explore(ct)
+            return
+
+        self.target = self.core_pos
+        vision_tiles = ct.get_nearby_tiles()
+        pos = self.pos
+
+        if self.target == self.core_pos:
+            for i in vision_tiles:
+                building_targets = None
+                i_building = ct.get_entity_type(ct.get_tile_building_id(i))
+                if i_building in [EntityType.SPLITTER]:
+                    building_targets = [i.add(ct.get_direction(ct.get_tile_building_id(i))), i.add(ct.get_direction(ct.get_tile_building_id(i)).rotate_left().rotate_left()), i.add(ct.get_direction(ct.get_tile_building_id(i)).rotate_right().rotate_right())]
+                elif i_building in [EntityType.FOUNDRY]:
+                    building_targets = [i.add(Direction.NORTH), i.add(Direction.WEST), i.add(Direction.EAST), i.add(Direction.SOUTH)]
+                elif self.pos.distance_squared(self.core_pos) <= 2 and ct.get_tile_building_id(i) != None and i_building in [EntityType.ROAD] and self.pos.distance_squared(i) <= 2 and ct.get_team(ct.get_tile_building_id(i)) == self.team:
+                    self.target = i
+                if building_targets != None:
+                    for building_target in building_targets:
+                        
+                        if building_target.x >= 0 and building_target.x < len(self.map[0]) and building_target.y >= 0 and building_target.y < len(self.map) and ct.is_in_vision(building_target) and ((i_building == EntityType.FOUNDRY and ct.get_entity_type(ct.get_tile_building_id(building_target)) not in [EntityType.CORE, EntityType.SPLITTER, EntityType.HARVESTER, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.FOUNDRY]) or (i_building == EntityType.SPLITTER and ct.get_entity_type(ct.get_tile_building_id(building_target)) not in [EntityType.CORE, EntityType.SPLITTER, EntityType.HARVESTER, EntityType.SENTINEL, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.FOUNDRY])) and ct.get_tile_env(building_target) != Environment.WALL:
+                            if ct.get_entity_type(ct.get_tile_building_id(building_target)) != EntityType.GUNNER or i_building != EntityType.SPLITTER or (ct.get_entity_type(ct.get_tile_building_id(building_target)) == EntityType.GUNNER and i_building == EntityType.SPLITTER and ct.get_sentinel_cost()[0] < ct.get_global_resources()[0]):
+                                if building_target.distance_squared(pos) < self.target.distance_squared(pos) or self.target == self.core_pos:
+                                    self.target = building_target
+                                    print(self.target)
+
+            for i in ct.get_nearby_tiles():
+                if ct.get_hp(ct.get_tile_building_id(i)) < ct.get_max_hp(ct.get_tile_building_id(i)) and ct.get_team() == self.team:
+                    if i.distance_squared(pos) < self.target.distance_squared(pos) or self.target == self.core_pos:
+                        print(f"Healing {i}")
+                        self.target = i
+
+        if self.target == self.core_pos and ct.get_entity_type(ct.get_tile_building_id(pos)) == EntityType.CORE:
+            print("Cry")
+            return
+        
+        if self.pos.distance_squared(self.target) > 2:
+            self.explore(ct)
+            return
+
+        elif ct.can_heal(self.target) and ct.get_entity_type(ct.get_tile_building_id(self.target)) != EntityType.ROAD:
+            print("Healing")
+            ct.heal(self.target)
+            return
+        elif ct.can_destroy(self.target) and ct.get_entity_type(ct.get_tile_building_id(self.target)) not in [EntityType.SPLITTER, EntityType.GUNNER, EntityType.HARVESTER, EntityType.SENTINEL, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.FOUNDRY]:
+            ct.destroy(self.target)
+            self.target = self.core_pos
+        if self.target in ct.get_nearby_tiles():
+            for d in STRAIGHTS:
+                if ct.get_entity_type(ct.get_tile_building_id(self.target)) == EntityType.GUNNER and ct.can_destroy(self.target) and ct.get_sentinel_cost()[0] <= ct.get_global_resources()[0]:
+                    ct.destroy(self.target)
+                if ( 0 <= self.target.add(d).y < ct.get_map_height() and 0 <= self.target.add(d).x < ct.get_map_width() and ct.get_tile_building_id(self.target.add(d)) is not None and
+                        ct.get_entity_type(ct.get_tile_building_id(self.target.add(d))) in [EntityType.SPLITTER, EntityType.FOUNDRY] and 
+                        ct.can_build_sentinel(self.target, self.target.direction_to(self.core_pos).opposite())):
+                    ct.build_sentinel(self.target, self.target.direction_to(self.core_pos).opposite())
+                elif ( 0 <= self.target.add(d).y < ct.get_map_height() and 0 <= self.target.add(d).x < ct.get_map_width() and ct.get_tile_building_id(self.target.add(d)) is not None and 
+                        ct.get_entity_type(ct.get_tile_building_id(self.target.add(d))) in [EntityType.SPLITTER, EntityType.FOUNDRY] and 
+                        ct.can_build_gunner(self.target, d.opposite())):
+                    ct.build_gunner(self.target, d.opposite())
+
+        if pos == self.target:
+            for d in DIRECTIONS:
+                if ct.can_move(d):
+                    ct.move(d)
+
+        #if not(ct.get_position().add(ct.get_position().direction_to(self.target)) == self.target):
+            #self.explore(ct)
