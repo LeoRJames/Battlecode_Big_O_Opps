@@ -1913,7 +1913,7 @@ class Player:
                     self.harvest_ore(ct, closest_tit)
                     self.ore_target = closest_tit
                     ct.draw_indicator_line(self.pos, closest_tit, 0, 255, 0)
-                elif len(self.ax) != 0 and ((len(self.mined_ax) < 8 or ct.get_current_round() > 1000) or (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000)):
+                elif len(self.ax) != 0 and ct.get_current_round() > 50 and ((len(self.mined_ax) < 8 or ct.get_current_round() > 1000) or (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000)):
                     closest_ax = Position(1000, 1000)
                     for j in range(len(self.ax)):
                         if self.ax[j].distance_squared(self.core_pos) < closest_ax.distance_squared(self.core_pos):
@@ -1921,7 +1921,7 @@ class Player:
                     self.harvest_ore(ct, closest_ax)
                     self.ore_target = closest_ax
                     ct.draw_indicator_line(self.pos, closest_ax, 0, 255, 0)
-                elif self.enemy_core_pos != Position(1000, 1000):
+                elif self.enemy_core_pos != Position(1000, 1000) and not (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000):
                     self.target = Position(1000, 1000)
                     self.status = ATTACK_ENEMY_SUPPLY_LINES
                 else:
