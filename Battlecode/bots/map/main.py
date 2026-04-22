@@ -701,6 +701,7 @@ class Player:
             return
         else:
             for i in range(len(path_explore)):
+                print(path_explore[i])
                 ct.draw_indicator_dot(path_explore[i], 0, 255, 255)
             if len(path_explore) > 1:    # If next to target but cannot move there as there is a builder bot this condition is not satisfied so will just wait
                 if ct.can_build_road(path_explore[1]):  # Fails if trying to build on to core
@@ -1644,8 +1645,8 @@ class Player:
             print("Sentinel Cost:", ct.get_sentinel_cost() )
 
         else:
-            if ct.get_hp() < ct.get_max_hp() and ct.can_heal(ct.get_position):
-                ct.heal(ct.get_position)
+            if ct.get_hp() < ct.get_max_hp() and ct.can_heal(self.pos):
+                ct.heal(self.pos)
             # Add some feature to roam about (leo's new thingy)
             print("Nothing to do!", self.defence_mode)
 
@@ -1853,7 +1854,7 @@ class Player:
 
     def find_corners(self, centre, radii=None):
         if radii == None:
-            radii = ((self.target.distance_squared(centre))**(1/2)) // (98**(1/2))
+            radii = int(((self.target.distance_squared(centre))**(1/2)) // (98**(1/2)))
         count = 0
         x1 = centre.x-radii*7
         if x1 < 0:
@@ -1883,13 +1884,13 @@ class Player:
                 start = self.explore_start
         if self.target != Position(1000, 1000) and self.pos.distance_squared(self.target) > 20:
             if self.target in self.unreachable_tiles:
-                count, x1, x2, y1, y2, radii = self.find_corners(centre, radii = (self.target.distance_squared(centre) // 98) + 1)
+                count, x1, x2, y1, y2, radii = self.find_corners(centre, radii = int(((self.target.distance_squared(centre))**(1/2)) // ((98)**(1/2))) + 1)
                 self.target = Position(x1, y1)
             print(self.target)
             self.explore(ct)
         elif self.target == Position(1000, 1000):
             if self.target in self.unreachable_tiles:
-                count, x1, x2, y1, y2, radii = self.find_corners(centre, radii = (self.target.distance_squared(centre) // 98) + 1)
+                count, x1, x2, y1, y2, radii = self.find_corners(centre, radii = int(((self.target.distance_squared(centre))**(1/2)) // ((98)**(1/2))) + 1)
                 self.target = Position(x1, y1)
             else:
                 self.target = Position(start.x, start.y)
