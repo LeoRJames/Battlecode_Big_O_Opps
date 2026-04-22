@@ -734,3 +734,29 @@ def defence(self, ct):
 
         #if not(ct.get_position().add(ct.get_position().direction_to(self.target)) == self.target):
             #self.explore(ct)
+
+def exploring_the_map(self, ct, start=None):
+        if self.target != Position(1000, 1000) and self.map[self.target.y][self.target.x][0] == 0:
+            self.explore(ct)
+        else:
+            self.target = Position(1000, 1000)
+            CORNERS = [Position(0, 0), Position(ct.get_map_width()-1, 0), Position(0, ct.get_map_height()-1), Position(ct.get_map_width()-1, ct.get_map_height()-1)]
+            closest_corner = self.target    #=Position(1000, 1000)
+            iteration = 0
+            while closest_corner == Position(1000, 1000) and iteration < (Position(0, 0).distance_squared(Position(int(ct.get_map_width()/2), int(ct.get_map_height()/2))))/7: # Ends if new position to explore is found or is at centre
+                for corner in CORNERS:
+                    for i in range(7*iteration):
+                        corner = corner.add(Direction.CENTRE)
+                        if corner == Position(int(ct.get_map_width()/2), int(ct.get_map_height()/2)):
+                            break
+                    if self.map[corner.y][corner.x] == [0, 0, 0, [0], 0] and self.pos.distance_squared(corner) < self.pos.distance_squared(closest_corner):
+                        closest_corner = corner
+                iteration += 1
+            if closest_corner == Position(1000, 1000):
+                self.status = DEFENCE # Switch to defence for now
+                self.target = Position(1000, 1000)
+            else:   # Explore to chosen corner
+                self.target = closest_corner
+                self.explore(ct)
+            # Find closest corner, move until it is in vision radius (covered by first if)
+            ct.draw_indicator_dot(self.target, 255, 0, 0)

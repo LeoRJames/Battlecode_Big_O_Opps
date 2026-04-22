@@ -388,7 +388,7 @@ class Player:
                 if tile[0] == Environment.WALL and not current == target:
                     continue
 
-                if tile[0] == 0 or ((nx, ny) == target) or ((    # current == target and (self.target.x, self.target.y) == target
+                if tile[0] == 0 or ((nx, ny) == target) or ((nx, ny) == (self.enemy_core_pos.x, self.enemy_core_pos.y) and tile[1] == EntityType.CORE) or ((    # current == target and (self.target.x, self.target.y) == target
                     not (tile[4] in [EntityType.BUILDER_BOT]
                         and ct_pos.distance_squared(Position(cx, cy)) <= 2)
                 ) and (
@@ -1386,38 +1386,6 @@ class Player:
                     ct.rotate(target.direction_to(i))
                     break
 
-    '''def exploring_the_map(self,  ct):
-        if self.target != Position(1000, 1000) and self.map[self.target.y][self.target.x][0] == 0:
-            self.explore(ct)
-        else:
-            CORNERS = ((0, 0))'''
-
-    '''def exploring_the_map(self, ct, start=None):
-        if self.target != Position(1000, 1000) and self.map[self.target.y][self.target.x][0] == 0:
-            self.explore(ct)
-        else:
-            self.target = Position(1000, 1000)
-            CORNERS = [Position(0, 0), Position(ct.get_map_width()-1, 0), Position(0, ct.get_map_height()-1), Position(ct.get_map_width()-1, ct.get_map_height()-1)]
-            closest_corner = self.target    #=Position(1000, 1000)
-            iteration = 0
-            while closest_corner == Position(1000, 1000) and iteration < (Position(0, 0).distance_squared(Position(int(ct.get_map_width()/2), int(ct.get_map_height()/2))))/7: # Ends if new position to explore is found or is at centre
-                for corner in CORNERS:
-                    for i in range(7*iteration):
-                        corner = corner.add(Direction.CENTRE)
-                        if corner == Position(int(ct.get_map_width()/2), int(ct.get_map_height()/2)):
-                            break
-                    if self.map[corner.y][corner.x] == [0, 0, 0, [0], 0] and self.pos.distance_squared(corner) < self.pos.distance_squared(closest_corner):
-                        closest_corner = corner
-                iteration += 1
-            if closest_corner == Position(1000, 1000):
-                self.status = DEFENCE # Switch to defence for now
-                self.target = Position(1000, 1000)
-            else:   # Explore to chosen corner
-                self.target = closest_corner
-                self.explore(ct)
-            # Find closest corner, move until it is in vision radius (covered by first if)
-            ct.draw_indicator_dot(self.target, 255, 0, 0)'''
-
     def exploring_the_map(self, ct, centre=None, start=None):
         if centre == None:
             centre = Position(len(self.map[0])//2, len(self.map)//2)
@@ -1885,6 +1853,8 @@ class Player:
                                 break
                             elif building == None:  # If nothing on a tile then good place to build
                                 chosen_tile = check_tile
+                                if check_tile.distance_squared(self.core_pos) <= 5:
+                                    break
                             elif building in [EntityType.GUNNER, EntityType.SENTINEL] and team == self.team and chosen_tile == None:    # If turret on tile then could build here if not another tile already found
                                 chosen_tile = check_tile
                              # reset now before target is changed as not needed to remain True
@@ -1897,6 +1867,9 @@ class Player:
                             self.target = chosen_tile
 
                     elif self.map[self.target.y][self.target.x][1] == EntityType.BRIDGE:
+                        if ct.get_splitter_cost()[0] > ct.get_global_resources()[0]:
+                            self.status = DEFENCE
+                            return
                         if ct.can_destroy(self.target):
                             ct.destroy(self.target)
                         checks = [(-1, 0), (1, 0), (0, -1), (0, 1)]
@@ -1919,9 +1892,9 @@ class Player:
                         if conveyor == None:    # If none into this tile then just face towards core
                             if ct.can_build_splitter(self.target, self.target.direction_to(self.core_pos)):
                                 ct.build_splitter(self.target, self.target.direction_to(self.core_pos))
-                            else:
-                                if ct.can_build_splitter(self.target, conveyor.direction_to(self.target)):
-                                    ct.build_splitter(self.target, conveyor.direction_to(self.target))
+                        else:
+                            if ct.can_build_splitter(self.target, conveyor.direction_to(self.target)):
+                                ct.build_splitter(self.target, conveyor.direction_to(self.target))
 
                     else:
                         if self.pos == self.target:
@@ -1948,7 +1921,8 @@ class Player:
                                     foundry = True
                                     break
                             if not foundry:
-                                ct.destroy(self.target)
+                                if ct.can_destroy(self.target):
+                                    ct.destroy(self.target)
                             else:
                                 self.splitter_resource[self.target] = False
                                 self.target = Position(1000, 1000)
