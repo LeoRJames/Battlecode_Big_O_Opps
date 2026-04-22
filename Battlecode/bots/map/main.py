@@ -676,7 +676,7 @@ class Player:
                     #return marker_value_id
         if self.status == INIT:
             self.status = DEFENCE
-            if sum([ 1 if ct.get_entity_type(i) == EntityType.BUILDER_BOT else 0 for i in ct.get_nearby_entities(5)]) > 4 and ct.get_hp(ct.get_tile_building_id(ct.core_pos)) == ct.get_max_hp(ct.get_tile_building_id(ct.core_pos)):
+            if sum([ 1 if ct.get_entity_type(i) == EntityType.BUILDER_BOT else 0 for i in ct.get_nearby_entities(5)]) > 4 and ct.get_hp(ct.get_tile_building_id(self.core_pos)) == ct.get_max_hp(ct.get_tile_building_id(self.core_pos)):
                 self.status = EXPLORING
 
     def explore(self, ct, target=None):
@@ -1853,7 +1853,7 @@ class Player:
 
     def find_corners(self, centre, radii=None):
         if radii == None:
-            radii = (self.target.distance_squared(centre))**(1/2) // 98**(1/2)
+            radii = ((self.target.distance_squared(centre))**(1/2)) // (98**(1/2))
         count = 0
         x1 = centre.x-radii*7
         if x1 < 0:
