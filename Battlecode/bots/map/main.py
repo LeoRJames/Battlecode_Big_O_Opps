@@ -1087,6 +1087,7 @@ class Player:
             print(wall_loop)
             for tile in wall_loop:
                 ct.draw_indicator_dot(Position(tile[0], tile[1]), 255, 0, 0)
+                self.unreachable_tiles.append(Position(tile[0], tile[1]))
             inside_points = self.cells_inside_loop(wall_loop)
             print(inside_points)
             for tile in inside_points:
@@ -1260,6 +1261,7 @@ class Player:
             return
         elif len(self.enemy_mined_tit) == 0:
             self.enemy_mined_tit_target = None
+            self.explore_start = self.enemy_core_pos
             self.exploring_the_map(ct, self.enemy_core_pos)
             return
         elif self.enemy_mined_tit_target == None:   # Robust check
@@ -1615,6 +1617,28 @@ class Player:
                     ct.rotate(target.direction_to(i))
                     break
 
+    def find_corners(self, centre, radii=None):
+        if radii == None:
+            radii = (self.target.distance_squared(centre))**(1/2) // 98**(1/2)
+        count = 0
+        x1 = centre.x-radii*7
+        if x1 < 0:
+            x1 = 0
+            count += 1
+        y1 = centre.y-radii*7
+        if y1 < 0:
+            y1 = 0
+            count += 1
+        x2 = centre.x+radii*7
+        if x2 > len(self.map[0]) -1:
+            x2 = len(self.map[0]) -1
+            count += 1
+        y2 = centre.y+radii*7
+        if y2 > len(self.map) - 1:
+            y2 = len(self.map) - 1
+            count += 1
+        return count, x1, x2, y1, y2, radii
+
     def exploring_the_map(self, ct, centre=None, start=None):
         if centre == None:
             centre = Position(len(self.map[0])//2, len(self.map)//2)
@@ -1624,32 +1648,22 @@ class Player:
             else:
                 start = self.explore_start
         if self.target != Position(1000, 1000) and self.pos.distance_squared(self.target) > 20:
+            if self.target in self.unreachable_tiles:
+                count, x1, x2, y1, y2, radii = self.find_corners(centre, radii = (self.target.distance_squared(centre) // 98) + 1)
+                self.target = Position(x1, y1)
             print(self.target)
             self.explore(ct)
         elif self.target == Position(1000, 1000):
-            self.target = Position(start.x, start.y)
+            if self.target in self.unreachable_tiles:
+                count, x1, x2, y1, y2, radii = self.find_corners(centre, radii = (self.target.distance_squared(centre) // 98) + 1)
+                self.target = Position(x1, y1)
+            else:
+                self.target = Position(start.x, start.y)
             self.explore_start = self.target
             print(self.target)
             self.explore(ct)
         else:
-            radii = self.target.distance_squared(centre) // 98
-            count = 0
-            x1 = centre.x-radii*7
-            if x1 < 0:
-                x1 == 0
-                count += 1
-            y1 = centre.y-radii*7
-            if y1 < 0:
-                y1 == 0
-                count += 1
-            x2 = centre.x+radii*7
-            if x2 > len(self.map[0]) -1:
-                x2 = len(self.map[0]) -1
-                count += 1
-            y2 = centre.y+radii*7
-            if y2 > len(self.map) - 1:
-                y2 = len(self.map) - 1
-                count += 1
+            count, x1, x2, y1, y2, radii = self.find_corners(centre)
             print(centre, start, x1, x2, y1, y2, self.target, radii)
             if count == 4 and (self.target.x, self.target.y) == (x1, y2):
                 self.target = Position(1000, 1000)
@@ -1709,7 +1723,9 @@ class Player:
             if ct.can_place_marker(pos.add(i)):
                 ct.place_marker(pos.add(i), message)
                 break
-        self.explore(ct)
+
+        if self.pos.distance_squared(self.core_pos) > 8:
+            self.explore(ct)
 
     def run(self, ct: Controller) -> None:
 
@@ -1729,7 +1745,7 @@ class Player:
             self.update_map(ct)
 
             # Inital 3 bots to find enemy core location
-            if self.temp_counter < 3 and (self.num_spawned < 3 or (self.enemy_core_pos == Position(1000, 1000) and ct.get_current_round() > 500 and ct.get_global_resources()[0] > 500)):
+            if (self.num_spawned < 3 or (self.enemy_core_pos == Position(1000, 1000) and ct.get_current_round() > 500 and ct.get_global_resources()[0] > 500 and self.temp_counter < 6) or (self.enemy_core_pos == Position(1000, 1000) and ct.get_current_round() > 1000 and ct.get_global_resources()[0] > 1000 and self.temp_counter < 9) or (self.enemy_core_pos == Position(1000, 1000) and ct.get_current_round() > 1250 and ct.get_global_resources()[0] > 500 and self.temp_counter < 12) or (self.enemy_core_pos == Position(1000, 1000) and ct.get_current_round() > 1500 and ct.get_global_resources()[0] > 500 and self.temp_counter < 15) or (self.enemy_core_pos == Position(1000, 1000) and ct.get_current_round() > 1750 and ct.get_global_resources()[0] > 500 and self.temp_counter < 18)):
                 
                 possible_core_locations = [
                     [ct.get_map_width() - 1 - self.core_pos.x, self.core_pos.y],  # Horizontal Flip
@@ -1747,11 +1763,9 @@ class Player:
                     message = (
                             marker_status * (2**28)
                             + bot_id * (2**12)
-                            + possible_core_locations[self.temp_counter][0] * (2**6)
-                            + possible_core_locations[self.temp_counter][1])
+                            + possible_core_locations[self.temp_counter%3][0] * (2**6)
+                            + possible_core_locations[self.temp_counter%3][1])
                     self.temp_counter += 1
-                    if self.temp_counter == 3:
-                        self.temp_counter = 0
                     if self.num_spawned < 3:
                         self.num_spawned += 1
                     else:
@@ -1878,13 +1892,13 @@ class Player:
 
             elif self.status == EXPLORING:
                 print(f"Just roaming 'bout... \n Tit: {self.tit} \n Ax: {self.ax}")
-                if (len(self.tit) != 0 and ((len(self.mined_tit) < 12 or (ct.get_current_round() > 1000 and len(self.ax) == 0 and len(self.mined_ax) > 4)) or (len(self.mined_tit) < 12 and not (len(self.ax) != 0 and ((ct.get_global_resources()[0] > 750 and ct.get_global_resources()[1] == 0) or ct.get_current_round() >= 750))))) or (len(self.ax) != 0 and (len(self.mined_ax) < 8 or ct.get_current_round() > 1000)):
+                if (len(self.tit) != 0 and ((len(self.mined_tit) < 12 or (ct.get_current_round() > 1000 and len(self.ax) == 0 and len(self.mined_ax) > 4)) or (len(self.mined_tit) < 12 and not (len(self.ax) != 0 and ct.get_current_round() > 50 and ((ct.get_global_resources()[0] > 750 and ct.get_global_resources()[1] == 0) or ct.get_current_round() >= 750))))) or (len(self.ax) != 0 and (len(self.mined_ax) < 8 or ct.get_current_round() > 1000)):
                     self.target = Position(1000, 1000)
                     self.status = MINING_TITANIUM
                 elif len(self.enemy_mined_tit) != 0 and self.enemy_core_pos != Position(1000, 1000):
                     self.target = Position(1000, 1000)
                     self.status = ATTACK_ENEMY_SUPPLY_LINES
-                elif (len(self.tit) == 0 and ct.get_global_resources()[0] < 1000) or (len(self.ax) == 0 and ct.get_global_resources()[1] == 0) or (len(self.attacked_enemy_mined_tit) < 3):
+                elif (len(self.tit) == 0 and ct.get_global_resources()[0] < 500) or (len(self.ax) == 0 and ct.get_global_resources()[1] == 0) or (len(self.attacked_enemy_mined_tit) < 3):
                     print("Search for more to do")
                     self.exploring_the_map(ct)
                 else:
@@ -1896,6 +1910,7 @@ class Player:
                 if self.ore_target is not None:
                     if self.ore_target in self.tit + self.ax:
                         if self.ore_target in self.unreachable_tiles:
+                            self.unreachable_ores.append(self.ore_target)
                             if self.ore_target in self.tit:
                                 self.tit.remove(self.ore_target)
                             elif self.ore_target in self.ax:
