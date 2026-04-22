@@ -1761,7 +1761,7 @@ class Player:
                             ct.place_marker(i, message)
                             break
 
-            elif self.enemy_core_pos == Position(1000, 1000) and self.extra_spawned < 1 and ct.get_current_round() > 10 and self.num_spawned >= 3 and ct.get_builder_bot_cost()[0] < ct.get_global_resources()[0] < 500 and len(self.map[0]) >= 25 and len(self.map) >= 25:
+            elif ((self.extra_spawned < 1 and ct.get_current_round() > 10 and len(self.map[0]) >= 25 and len(self.map) >= 25 and self.enemy_core_pos == Position(1000, 1000)) or (self.extra_spawned < 2 and ct.get_current_round() > 1000 and ct.get_global_resources()[0] > 1000)) and self.num_spawned >= 3 and ct.get_builder_bot_cost()[0] < ct.get_global_resources()[0]:
                 for spawn_pos in ct.get_nearby_tiles(8):
                     if ct.can_spawn(spawn_pos):
                         ct.spawn_builder(spawn_pos)
@@ -1905,7 +1905,7 @@ class Player:
                             self.harvest_ore(ct, self.ore_target)
                     else:
                         self.ore_target = None
-                elif len(self.tit) != 0 and ((len(self.mined_tit) < 12 or (ct.get_current_round() > 1000 and len(self.ax) == 0 and len(self.mined_ax) > 4)) or (len(self.mined_tit) < 12 and not (len(self.ax) != 0 and ((ct.get_global_resources()[0] > 750 and ct.get_global_resources()[1] == 0) or ct.get_current_round() >= 750)))):
+                elif len(self.tit) != 0 and ((len(self.mined_tit) < 12 or (ct.get_current_round() > 1000 and len(self.ax) == 0 and len(self.mined_ax) > 4)) or (len(self.mined_tit) < 12 and not (len(self.ax) != 0 and ((ct.get_global_resources()[0] > 750 and ct.get_global_resources()[1] == 0) or ct.get_current_round() >= 750))) or (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000)):
                     closest_tit = Position(1000, 1000)
                     for i in range(len(self.tit)):
                         if self.tit[i].distance_squared(self.core_pos) < closest_tit.distance_squared(self.core_pos):
@@ -1913,7 +1913,7 @@ class Player:
                     self.harvest_ore(ct, closest_tit)
                     self.ore_target = closest_tit
                     ct.draw_indicator_line(self.pos, closest_tit, 0, 255, 0)
-                elif len(self.ax) != 0 and (len(self.mined_ax) < 8 or ct.get_current_round() > 1000):
+                elif len(self.ax) != 0 and ((len(self.mined_ax) < 8 or ct.get_current_round() > 1000) or (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000)):
                     closest_ax = Position(1000, 1000)
                     for j in range(len(self.ax)):
                         if self.ax[j].distance_squared(self.core_pos) < closest_ax.distance_squared(self.core_pos):
