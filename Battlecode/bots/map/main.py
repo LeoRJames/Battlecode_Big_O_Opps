@@ -385,10 +385,10 @@ class Player:
 
                 tile = grid[ny][nx]
 
-                if tile[0] == Environment.WALL and not current == target:
+                if tile[0] == Environment.WALL and not (nx, ny) == target:
                     continue
 
-                if tile[0] == 0 or ((nx, ny) == target) or ((nx, ny) == (self.enemy_core_pos.x, self.enemy_core_pos.y) and tile[1] == EntityType.CORE) or ((    # current == target and (self.target.x, self.target.y) == target
+                if tile[0] == 0 or ((nx, ny) == target) or (target == (self.enemy_core_pos.x, self.enemy_core_pos.y) and tile[1] == EntityType.CORE) or ((    # current == target and (self.target.x, self.target.y) == target
                     not (tile[4] in [EntityType.BUILDER_BOT]
                         and ct_pos.distance_squared(Position(cx, cy)) <= 2)
                 ) and (
@@ -1422,10 +1422,13 @@ class Player:
                 y2 = len(self.map) - 1
                 count += 1
             print(centre, start, x1, x2, y1, y2, self.target, radii)
-            if count == 4:
+            if count == 4 and (self.target.x, self.target.y) == (x1, y2):
                 self.target = Position(1000, 1000)
                 self.explore_start = None
-                self.status = ATTACK_ENEMY_CORE
+                if self.enemy_core_pos == Position(1000, 1000):
+                    self.status = DEFENCE
+                else:
+                    self.status = ATTACK_ENEMY_CORE
                 return
             CORNERS = [(x1, y1), (x2, y1), (x2, y2), (x1, y2)]
             if CORNERS[3] == (self.target.x, self.target.y):
