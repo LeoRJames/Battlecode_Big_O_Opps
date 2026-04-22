@@ -1387,7 +1387,6 @@ class Player:
                 self.explore(ct)
 
     def is_on_map(self, tile):
-
         return 0 <= tile.x < len(self.map[0]) and 0 <= tile.y < len(self.map)
 
     def defence(self, ct):
@@ -1409,6 +1408,8 @@ class Player:
         heal = 3
         reconnect_conveyors = 4
         build_defences = 5
+        # Work in progress
+        upgrade_conveyors = 6
 
         # If bot has low hp, heal + move (movement hopefully keeps it out of enemy fire)
         if ct.get_hp() < 0.5 * ct.get_max_hp() and False:
@@ -1471,7 +1472,7 @@ class Player:
                     if not(self.is_on_map(tile)):
                         break
                     map_tile = self.map[tile.y][tile.x]
-                    if map_tile[1] in [EntityType.GUNNER, EntityType.SENTINEL] and map_tile[2] == self.team:
+                    if map_tile[1] in [EntityType.GUNNER, EntityType.SENTINEL] and map_tile[2] == self.team and map_tile[3] == j.opposite():
                         print("Defence already built!")
                         break
 
@@ -1487,7 +1488,7 @@ class Player:
                         tile = i.add(j).add(k)
                         if self.is_on_map(tile):
                             map_tile = self.map[tile.y][tile.x]
-                            if (map_tile[1] in [EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR] and map_tile[3][0] == k.opposite()) or map_tile[1] in [EntityType.HARVESTER]:
+                            if (map_tile[1] in [EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR] and map_tile[3][0] == k.opposite()) or map_tile[1] in [EntityType.HARVESTER, EntityType.FOUNDRY]:
                                 self.defence_target = i
                                 self.target = i.add(j)
                                 self.defence_mode = destroy_turret
@@ -1524,9 +1525,13 @@ class Player:
                 if self.defence_mode > build_defences:
                     self.target = self.core_pos
 
-            # Destroy roads around the core (to give space for markers) - dubious - may use up titanium
-            if self.defence_mode == 10 and self.pos.distance_squared(self.core_pos) <= 2 and i_building in [EntityType.ROAD] and self.pos.distance_squared(i) <= 2 and ct.get_team(ct.get_tile_building_id(i)) == self.team and self.pos != i:
-               ct.destroy(i)
+            # Upgrade conveyors to armoured conveyors
+            elif self.defence_mode >= upgrade_conveyors and i_building == EntityType.CONVEYOR and i_team == self.team:
+                resources, cost = ct.get_global_resources(), ct.get_armoured_conveyor_cost()
+                if resources[0] > 5*cost[0] and resources[1] > 5*cost[1] and (self.target == self.core_pos or self.target.distance_squared(self.core_pos) > i.distance_squared(self.core_pos)):
+                    self.target = i
+                    self.defence_mode = upgrade_conveyors
+                    print(i)
 
             if building_targets is not None:
                 for building_target in building_targets:
@@ -1538,6 +1543,7 @@ class Player:
 
 
         if self.pos.distance_squared(self.target) >= 4: # and self.defence_mode >= 3:
+            print(f"Defence mode: {self.defence_mode}, target: ({self.target.x}, {self.target.y})")
             self.explore(ct)
             return
 
@@ -1610,7 +1616,7 @@ class Player:
             if self.pos.distance_squared(target) >= 4:
                 self.explore(ct, target)
 
-        elif self.defence_mode == heal :
+        elif self.defence_mode == heal:
             print(f"Defence_mode 3: Healing {self.target}")
             if ct.can_heal(self.target):
                 print("Healing")
@@ -1644,17 +1650,43 @@ class Player:
                     return
             print("Sentinel Cost:", ct.get_sentinel_cost() )
 
+        elif self.defence_mode == upgrade_conveyors:
+            print(f"Defence_mode 6: Upgrading {self.target}")
+            if self.map[self.target.y][self.target.x][1] == EntityType.CONVEYOR and ct.can_destroy(self.target):
+                direction = self.map[self.target.y][self.target.x][3][0]
+                ct.destroy(self.target)
+                ct.draw_indicator_line(self.pos, self.core_pos, 0, 0, 0)
+                if ct.can_build_armoured_conveyor(self.target, direction):
+                    ct.build_armoured_conveyor(self.target, direction)
+                else:
+                    ct.resign()
+            self.defence_mode = 10
+
         else:
             if ct.get_hp() < ct.get_max_hp() and ct.can_heal(self.pos):
                 ct.heal(self.pos)
             # Add some feature to roam about (leo's new thingy)
             print("Nothing to do!", self.defence_mode)
+            # Very basic explore algorithm
+
+        # Destroy roads around the core (to give space for markers) - dubious - may use up titanium
+        if self.pos.distance_squared(self.core_pos) < 4:
+            for i in DIRECTIONS:
+                tile = self.pos.add(i)
+                if self.map[tile.y][tile.x][1] == EntityType.ROAD:
+                    if ct.can_destroy(tile):
+                        ct.destroy(tile)
+                        return
+                    else:
+                        if ct.can_move(i):
+                            ct.move(i)
+                            if ct.can_fire(tile):
+                                ct.fire(tile)
 
         if self.pos == self.target and self.target != self.core_pos:
             for d in DIRECTIONS:
                 if ct.can_move(d):
                     ct.move(d)
-
 
     def foundry(self, ct):
         if self.target == Position(1000, 1000):
