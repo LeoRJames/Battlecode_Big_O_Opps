@@ -67,6 +67,7 @@ class Player:
         self.explore_start = None
         self.defence_mode = 10
         self.defence_target = Position(1000, 1000)
+        self.moving_turret_supply = False
 
     def initialise_map(self, ct):   # Set up 2d array for each tile on map each storing a list of three info pieces (tile type, building, team)
         self.team = ct.get_team()
@@ -931,7 +932,7 @@ class Player:
                 if ct.can_build_bridge(path[0], path[1]):
                     ct.build_bridge(path[0], path[1])
                     self.built_harvester[1] = path[1]
-                elif self.map[path[0].y][path[0].x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE, EntityType.FOUNDRY, EntityType.HARVESTER] and self.map[path[0].y][path[0].x][2] == self.team:
+                elif self.map[path[0].y][path[0].x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE] and self.map[path[0].y][path[0].x][2] == self.team:
                     move_dir = self.pos.direction_to(path[0])
                     if ct.can_move(move_dir):
                         ct.move(move_dir)
@@ -1006,7 +1007,7 @@ class Player:
                         ct.move(move_dir)
                     else:
                         self.built_harvester[1] = path[0]
-                elif self.map[path[0].y][path[0].x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE, EntityType.FOUNDRY, EntityType.HARVESTER] and self.map[path[0].y][path[0].x][2] == self.team:
+                elif self.map[path[0].y][path[0].x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE] and self.map[path[0].y][path[0].x][2] == self.team:
                     move_dir = self.pos.direction_to(path[0])
                     if ct.can_move(move_dir):
                         ct.move(move_dir)
@@ -1204,6 +1205,70 @@ class Player:
             self.target = Position(1000, 1000)
         if ct.get_current_round() > 200:
             self.status = EXPLORING
+
+    def transport_resources(self, ct, end, start=None):
+        if start == None:
+            start = self.pos
+        if self.target == Position(1000, 1000):
+            self.target = start
+        if self.pos != self.target:
+            self.explore(ct)
+            return
+        if self.map[self.pos.y][self.pos.x][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR, EntityType.SPLITTER] and self.map[self.pos.y][self.pos.x][2] == self.team:
+            path_dict, cost, best_end_tile = self.pathfinder(ct, end, start=self.pos.add(self.map[self.pos.y][self.pos.x][3][0]), bridge=True, avoid=True)
+        else:
+            path_dict, cost, best_end_tile = self.pathfinder(ct, end, bridge=True, avoid=True)
+        if path_dict == None:
+            self.pathfinder_fail_count += 1
+            if self.pathfiner_fail_count > 5:
+                print("NO PATH")
+                self.pathfinder_fail_count = 0
+            return
+        path = self.reconstruct_path(path_dict, best_end_tile)
+        path_dict, cost, best_end_tile = self.pathfinder(ct, path[1], path[0], conv=True, avoid=True)
+        if best_end_tile != path[1] or ct.get_bridge_cost()[0] < cost[best_end_tile] * ct.get_conveyor_cost()[0] :
+            print("Bridge Path is Better!")
+            if self.map[path[0].y][path[0].x][2] != self.team:
+                move_dir = self.pos.direction_to(path[0])
+                if ct.can_move(move_dir) and self.pos != path[0]:
+                    ct.move(move_dir)
+            if ct.can_fire(path[0]) and self.map[path[0].y][path[0].x][2] != self.team:
+                ct.fire(path[0])
+            elif ct.can_destroy(path[0]) and not (self.map[path[0].y][path[0].x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE, EntityType.FOUNDRY, EntityType.HARVESTER] and self.map[path[0].y][path[0].x][2] == self.team):
+                ct.destroy(path[0])
+            if ct.can_build_bridge(path[0], path[1]):
+                ct.build_bridge(path[0], path[1])
+                self.target = path[1]
+            elif self.map[path[0].y][path[0].x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE] and self.map[path[0].y][path[0].x][2] == self.team:
+                move_dir = self.pos.direction_to(path[0])
+                if ct.can_move(move_dir):
+                    ct.move(move_dir)
+            elif ct.get_bridge_cost()[0] > ct.get_global_resources()[0]:
+                print("Waiting for money to build bridge")
+                return
+        else:
+            print("conveyor is better")
+            path = self.reconstruct_path(path_dict, best_end_tile)
+            conveyor_dir = path[0].direction_to(path[1])
+            if self.map[path[0].y][path[0].x][2] != self.team:
+                move_dir = self.pos.direction_to(path[0])
+                if ct.can_move(move_dir):
+                    ct.move(move_dir)
+            if ct.can_fire(path[0]) and self.map[path[0].y][path[0].x][2] != self.team:
+                ct.fire(path[0])
+            elif ct.can_destroy(path[0]) and not (self.map[path[0].y][path[0].x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE, EntityType.FOUNDRY, EntityType.HARVESTER] and self.map[path[0].y][path[0].x][2] == self.team):
+                ct.destroy(path[0])
+            if ct.can_build_conveyor(path[0], conveyor_dir):
+                ct.build_conveyor(path[0], conveyor_dir)
+                move_dir = self.pos.direction_to(path[0])
+                if ct.can_move(move_dir):
+                    ct.move(move_dir)
+                else:
+                    self.target = path[0]
+            elif self.map[path[0].y][path[0].x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE] and self.map[path[0].y][path[0].x][2] == self.team:
+                move_dir = self.pos.direction_to(path[0])
+                if ct.can_move(move_dir):
+                    ct.move(move_dir)
 
     def attack_enemy_core(self, ct, close=None):
         if close == None:
@@ -1466,6 +1531,100 @@ class Player:
                 self.target = self.enemy_mined_tit_target
             elif (self.pos != self.target and self.map[self.target.y][self.target.x][2] != ct.get_team()) or (self.pos.distance_squared(self.target) > 2 and (self.map[self.target.y][self.target.x][2] == self.team or self.map[self.target.y][self.target.x][1] == None)):
                 self.explore(ct)
+
+    def moving_turret_start(self, ct, end):     # Basic, could account for own supply lines or enemies
+        start = None
+        for harv in self.mined_tit:
+            if start == None or harv.distance_squared(end) < start.distance_squared(end):
+                start = harv
+        return start
+    
+    def moving_turret_end(self, end, start, radii):   # radii: sentinel = 32, gunners = 9, builder bot = 20
+        
+        result = None
+        radii = int(radii**0.5)
+        width = len(self.map[0])
+        height = len(self.map)
+
+        for dx in range(-radii, radii + 1):
+            for dy in range(-radii, radii + 1):
+                if dx*dx + dy*dy <= radii:
+                    x = end.x + dx
+                    y = end.y + dy
+
+                    if not (0 <= x < width):
+                        continue
+                    if not (0 <= y < height):
+                        continue
+
+                    tile = self.map[y][x]
+                    if tile[0] != Environment.WALL and (tile[2] == None or (tile[2] != self.team and tile[1] in [EntityType.ROAD, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.MARKER]) or (tile[2] == self.team and tile[1] not in [EntityType.HARVESTER, EntityType.FOUNDRY, EntityType.CORE])):
+                        if result == None or self.tuple_distance_squared(start, (x, y)) < self.tuple_distance_squared(start, result):
+                            result = (x, y)
+
+        return result
+
+    def moving_turret(self, ct, end, start=None):
+        if start == None:
+            start = self.moving_turret_start(ct, end)
+
+        radii = 32
+        end_pos = self.moving_turret_end(self, ct, end, (start.x, start.y), radii) # Sentinel
+        if end_pos == None:
+            print("No end position")
+            self.moving_turret_supply = False
+            return
+        
+        if not self.moving_turret_supply:
+            if self.map[start.y][start.x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR]:
+                if self.pos != start:
+                    self.target = start
+                    self.explore(ct)
+                    return
+            elif self.map[start.y][start.x][1] == EntityType.BRIDGE:
+                if self.pos != self.map[start.y][start.x][3][0]:
+                    self.target = self.map[start.y][start.x][3][0]
+                    self.explore(ct)
+                    return
+            elif self.map[start.y][start.x][1] in [EntityType.HARVESTER, EntityType.FOUNDRY, EntityType.SPLITTER]:
+                width = len(self.map[0])
+                height = len(self.map)
+                target = None
+                for d in STRAIGHTS:
+                    check = start.add(d)
+                    if not (0 <= start.x < width and 0 <= start.y < height):
+                        continue
+                    tile = self.map[check.y][check.x]
+                    if tile[0] == Environment.WALL:
+                        continue
+                    if tile[1] == None:
+                        target = tile
+                        break
+                    elif tile[1] in [EntityType.ROAD, EntityType.BARRIER] and tile[2] == self.team:
+                        target = tile
+                    elif tile[1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR] and target == None:
+                        target = tile
+                if target == None:
+                    print("No end position")
+                    return
+                self.target = target
+                if self.pos != self.target:
+                    self.explore(ct)
+                    return
+            if self.pos == self.target:
+                if ct.can_destroy(self.target):
+                    ct.destroy(self.target)
+                    return
+                elif ct.can_fire(self.target):
+                    ct.fire(self.target)
+                    return
+                elif self.map[self.target.y][self.target.x][1] == None:
+                    self.moving_turret_supply = True
+        
+        # LOOK AT VISION RADIUS FOR ENEMY TILES (USE FUNCTION JUST ABOVE FOR THIS NOT CT ONE)
+        # IF ENEMY TURRETS OR SUPPLY LINES THEN BUILD SENTINEL TO DESTROY THEM AT END OF MOVING TURRET PATH (OBVIOUSLY JUST WAIT IF THERE IS ALREADY A SENTINEL)
+        # IF AT ENEMY CORE THEN BUILD TURRET AND MOVE ON
+        self.transport_resources(ct, end_pos)
 
     def is_on_map(self, tile):
         return 0 <= tile.x < len(self.map[0]) and 0 <= tile.y < len(self.map)
