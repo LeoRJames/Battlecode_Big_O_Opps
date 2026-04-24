@@ -832,13 +832,13 @@ class Player:
                 self.built_harvester[1] = None
 
             if self.built_harvester[2] in self.mined_tit and len(self.mined_tit) > 12 and self.try_avoid:
-                if self.map[self.pos.y][self.pos.x][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR, EntityType.SPLITTER]:
+                if self.map[self.pos.y][self.pos.x][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR, EntityType.SPLITTER] and self.map[self.pos.y][self.pos.x][2] == self.team:
                     path_dict, cost, best_end_tile = self.pathfinder(ct, self.core_pos, start=self.pos.add(self.map[self.pos.y][self.pos.x][3][0]), bridge=True, avoid=True)
                 else:
                     path_dict, cost, best_end_tile = self.pathfinder(ct, self.core_pos, bridge=True, avoid=True)
             else:
                 if self.map[self.pos.y][self.pos.x][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR, EntityType.SPLITTER]:
-                    path_dict, cost, best_end_tile = self.pathfinder(ct, self.core_pos, start=self.pos.add(self.map[self.pos.y][self.pos.x][3][0]), bridge=True, avoid=True)
+                    path_dict, cost, best_end_tile = self.pathfinder(ct, self.core_pos, start=self.pos.add(self.map[self.pos.y][self.pos.x][3][0]), bridge=True)
                 else:
                     path_dict, cost, best_end_tile = self.pathfinder(ct, self.core_pos, bridge=True)
             if path_dict == None:
@@ -891,11 +891,21 @@ class Player:
             print(f"Bridge cost: {ct.get_bridge_cost()}, Conveyor cost: {cost[best_end_tile] * ct.get_conveyor_cost()}")
             if best_end_tile != path[1] or ct.get_bridge_cost()[0] < cost[best_end_tile] * ct.get_conveyor_cost()[0] :
                 print("Bridge Path is Better!")
-                if ct.can_destroy(path[0]):
+                if self.map[path[0].y][path[0].x][2] != self.team:
+                    move_dir = self.pos.direction_to(path[0])
+                    if ct.can_move(move_dir) and self.pos != path[0]:
+                        ct.move(move_dir)
+                if ct.can_fire(path[0]) and self.map[path[0].y][path[0].x][2] != self.team:
+                    ct.fire(path[0])
+                elif ct.can_destroy(path[0]) and not (self.map[path[0].y][path[0].x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE, EntityType.FOUNDRY, EntityType.HARVESTER] and self.map[path[0].y][path[0].x][2] == self.team):
                     ct.destroy(path[0])
                 if ct.can_build_bridge(path[0], path[1]):
                     ct.build_bridge(path[0], path[1])
                     self.built_harvester[1] = path[1]
+                elif self.map[path[0].y][path[0].x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE, EntityType.FOUNDRY, EntityType.HARVESTER] and self.map[path[0].y][path[0].x][2] == self.team:
+                    move_dir = self.pos.direction_to(path[0])
+                    if ct.can_move(move_dir):
+                        ct.move(move_dir)
                 elif ct.get_bridge_cost()[0] > ct.get_global_resources()[0]:
                     print("Waiting for money to build bridge")
                     return
@@ -903,7 +913,13 @@ class Player:
                 print("conveyor is better")
                 path = self.reconstruct_path(path_dict, best_end_tile)
                 conveyor_dir = path[0].direction_to(path[1])
-                if ct.can_destroy(path[0]):
+                if self.map[path[0].y][path[0].x][2] != self.team:
+                    move_dir = self.pos.direction_to(path[0])
+                    if ct.can_move(move_dir):
+                        ct.move(move_dir)
+                if ct.can_fire(path[0]) and self.map[path[0].y][path[0].x][2] != self.team:
+                    ct.fire(path[0])
+                elif ct.can_destroy(path[0]) and not (self.map[path[0].y][path[0].x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE, EntityType.FOUNDRY, EntityType.HARVESTER] and self.map[path[0].y][path[0].x][2] == self.team):
                     ct.destroy(path[0])
                 if not (self.built_harvester[2] in self.mined_tit and len(self.mined_tit) > 12 and self.try_avoid) and len(path) > 2 and self.map[path[1].y][path[1].x][1] == EntityType.CORE:
                     for d in STRAIGHTS:
@@ -944,10 +960,15 @@ class Player:
 
                 if ct.can_build_conveyor(path[0], conveyor_dir):
                     ct.build_conveyor(path[0], conveyor_dir)
-                    if ct.can_move(conveyor_dir):
-                        ct.move(conveyor_dir)
+                    move_dir = self.pos.direction_to(path[0])
+                    if ct.can_move(move_dir):
+                        ct.move(move_dir)
                     else:
                         self.built_harvester[1] = path[0]
+                elif self.map[path[0].y][path[0].x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE, EntityType.FOUNDRY, EntityType.HARVESTER] and self.map[path[0].y][path[0].x][2] == self.team:
+                    move_dir = self.pos.direction_to(path[0])
+                    if ct.can_move(move_dir):
+                        ct.move(move_dir)
                 elif ct.get_conveyor_cost()[0] > ct.get_global_resources()[0]:
                     print("Waiting for money to build conveyor")
                     return
@@ -1743,10 +1764,10 @@ class Player:
                 self.defence_mode = heal
 
             # Check if conveyor route home needs rebuilding
-            elif i_building in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR] and ct.is_in_vision(i.add(i_direction)) and self.map[i.add(i_direction).y][i.add(i_direction).x][1] not in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE, EntityType.SENTINEL, EntityType.GUNNER] and self.defence_mode >= reconnect_conveyors:
-                print(i.add(i_direction))
-                if ct.get_tile_builder_bot_id(i.add(i_direction)) is None and ct.get_stored_resource(ct.get_tile_building_id(i)) is not None or self.pos == i.add(i_direction):
-                    self.target = i.add(i_direction)
+            elif i_building in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR] and ct.is_in_vision(i) and self.map[i.add(i_direction).y][i.add(i_direction).x][1] not in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE, EntityType.SENTINEL, EntityType.GUNNER] and self.defence_mode >= reconnect_conveyors:
+                print(i)
+                if ct.get_tile_builder_bot_id(i) is None and ct.get_stored_resource(ct.get_tile_building_id(i)) is not None or self.pos == i:
+                    self.target = i
                     self.defence_mode = reconnect_conveyors
 
             # Build gunners next to a splitter
@@ -1866,7 +1887,7 @@ class Player:
                 self.explore(ct,self.target)
                 return
             self.built_harvester[0] = True
-            self.harvest_ore(ct, self.core_pos)
+            self.harvest_ore(ct, self.target)
             return
 
         elif self.defence_mode == build_defences:
@@ -2119,10 +2140,26 @@ class Player:
                 if ct.can_rotate(target.direction_to(i)) and 0 != ct.get_ammo_amount(): # and ct.get_global_resources()[0] > 50:
                     ct.rotate(target.direction_to(i))
                     break
+    
+    def ceil(self, a, b, div=7):   # Pass a, b Position
+        radii1 = int((abs( a.x - b.x ) // div ) )
+        radii2 = int((abs( a.y - b.y ) // div ) )
+        if radii1 >= radii2:
+            radii = radii1
+            rem = abs( a.x - b.x ) % div
+            if rem > 0:
+                radii = radii1 + 1
+        else:
+            radii = radii2
+            rem = abs( a.y - b.y ) % div
+            if rem > 0:
+                radii = radii2 + 1
+        return radii
+        
 
     def find_corners(self, centre, radii=None):
         if radii == None:
-            radii = int(((self.target.distance_squared(centre))**(1/2)) // (98**(1/2)))
+            radii = self.ceil(self.target, centre)
         count = 0
         x1 = centre.x-radii*7
         if x1 < 0:
@@ -2152,13 +2189,13 @@ class Player:
                 start = self.explore_start
         if self.target != Position(1000, 1000) and self.pos.distance_squared(self.target) > 20:
             if self.target in self.unreachable_tiles:
-                count, x1, x2, y1, y2, radii = self.find_corners(centre, radii = int(((self.target.distance_squared(centre))**(1/2)) // ((98)**(1/2))) + 1)
+                count, x1, x2, y1, y2, radii = self.find_corners(centre, radii = self.ceil(self.target, centre) + 1)
                 self.target = Position(x1, y1)
             print(self.target)
             self.explore(ct)
         elif self.target == Position(1000, 1000):
             if self.target in self.unreachable_tiles:
-                count, x1, x2, y1, y2, radii = self.find_corners(centre, radii = int(((self.target.distance_squared(centre))**(1/2)) // ((98)**(1/2))) + 1)
+                count, x1, x2, y1, y2, radii = self.find_corners(centre, radii = self.ceil(self.target, centre) + 1)
                 self.target = Position(x1, y1)
             else:
                 self.target = Position(start.x, start.y)
@@ -2395,7 +2432,7 @@ class Player:
 
             elif self.status == EXPLORING:
                 print(f"Just roaming 'bout... \n Tit: {self.tit} \n Ax: {self.ax}")
-                if (len(self.tit) != 0 and ((len(self.mined_tit) < 12 or (ct.get_current_round() > 1000 and len(self.ax) == 0 and len(self.mined_ax) > 4)) or (len(self.mined_tit) < 12 and not (len(self.ax) != 0 and ct.get_current_round() > 50 and ((ct.get_global_resources()[0] > 750 and ct.get_global_resources()[1] == 0) or ct.get_current_round() >= 750))))) or (len(self.ax) != 0 and (len(self.mined_ax) < 8 or ct.get_current_round() > 1000)):
+                if (len(self.tit) != 0 and (ct.get_current_round() <= 50 or (len(self.mined_tit) < 12 or (ct.get_current_round() > 1000 and len(self.ax) == 0 and len(self.mined_ax) > 4)) or (len(self.mined_tit) < 12 and not (len(self.ax) != 0 and ((ct.get_global_resources()[0] > 750 and ct.get_global_resources()[1] == 0) or ct.get_current_round() >= 750))) or (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000))) or (len(self.ax) != 0 and ct.get_current_round() > 50 and len(self.mined_tit) > 0 and ((len(self.mined_ax) < 8 or ct.get_current_round() > 1000) or (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000))):
                     self.target = Position(1000, 1000)
                     self.status = MINING_TITANIUM
                 elif len(self.enemy_mined_tit) != 0 and self.enemy_core_pos != Position(1000, 1000):
@@ -2423,7 +2460,7 @@ class Player:
                             self.harvest_ore(ct, self.ore_target)
                     else:
                         self.ore_target = None
-                elif len(self.tit) != 0 and ((len(self.mined_tit) < 12 or (ct.get_current_round() > 1000 and len(self.ax) == 0 and len(self.mined_ax) > 4)) or (len(self.mined_tit) < 12 and not (len(self.ax) != 0 and ((ct.get_global_resources()[0] > 750 and ct.get_global_resources()[1] == 0) or ct.get_current_round() >= 750))) or (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000)):
+                elif len(self.tit) != 0 and (ct.get_current_round() <= 50 or (len(self.mined_tit) < 12 or (ct.get_current_round() > 1000 and len(self.ax) == 0 and len(self.mined_ax) > 4)) or (len(self.mined_tit) < 12 and not (len(self.ax) != 0 and ((ct.get_global_resources()[0] > 750 and ct.get_global_resources()[1] == 0) or ct.get_current_round() >= 750))) or (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000)):
                     closest_tit = Position(1000, 1000)
                     for i in range(len(self.tit)):
                         if self.tit[i].distance_squared(self.core_pos) < closest_tit.distance_squared(self.core_pos):
@@ -2431,7 +2468,7 @@ class Player:
                     self.harvest_ore(ct, closest_tit)
                     self.ore_target = closest_tit
                     ct.draw_indicator_line(self.pos, closest_tit, 0, 255, 0)
-                elif len(self.ax) != 0 and ct.get_current_round() > 50 and ((len(self.mined_ax) < 8 or ct.get_current_round() > 1000) or (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000)):
+                elif len(self.ax) != 0 and ct.get_current_round() > 50 and len(self.mined_tit) > 0 and ((len(self.mined_ax) < 8 or ct.get_current_round() > 1000) or (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000)):
                     closest_ax = Position(1000, 1000)
                     for j in range(len(self.ax)):
                         if self.ax[j].distance_squared(self.core_pos) < closest_ax.distance_squared(self.core_pos):
