@@ -925,8 +925,9 @@ class Player:
                 elif ct.can_destroy(path[0]) and not (self.map[path[0].y][path[0].x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE, EntityType.FOUNDRY, EntityType.HARVESTER] and self.map[path[0].y][path[0].x][2] == self.team):
                     ct.destroy(path[0])
                 if not (self.built_harvester[2] in self.mined_tit and len(self.mined_tit) > 12 and self.try_avoid) and len(path) >= 2 and self.map[path[1].y][path[1].x][1] == EntityType.CORE:
-                    if ct.can_build_splitter(path[0], conveyor_dir):
-                        ct.build_splitter(path[0], conveyor_dir)
+                    splitter_dir = self.pos.direction_to(path[0])
+                    if ct.can_build_splitter(path[0], splitter_dir):
+                        ct.build_splitter(path[0], splitter_dir)
                         print("Path Building Complete")
                         self.built_harvester = [False, None, None]
                         self.ore_target = None
