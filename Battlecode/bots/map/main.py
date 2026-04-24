@@ -761,12 +761,13 @@ class Player:
             elif self.map[ore.y][ore.x][1] in [EntityType.ROAD, None] and self.map[ore.y][ore.x][2] in [self.team, None] :
                 for d in STRAIGHTS:
                     check_location = ore.add(d)
-                    exists = True if 0 < check_location.x < ct.get_map_width() and 0 < check_location.y < ct.get_map_height() else False
+                    exists = True if 0 <= check_location.x < len(self.map[0]) and 0 <= check_location.y < len(self.map) else False
                     if exists:
                         is_not_wall = True if self.map[check_location.y][check_location.x][0] != Environment.WALL else False
-                        if is_not_wall and self.map[check_location.y][check_location.x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.ROAD, EntityType.BRIDGE, EntityType.SPLITTER, None] and self.map[check_location.y][check_location.x][2] in [self.team, None] :
-                            can_build_harvester = True
-                            self.built_harvester[1] = check_location
+                        if is_not_wall and self.map[check_location.y][check_location.x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.ROAD, EntityType.BRIDGE, EntityType.SPLITTER, None] and self.map[check_location.y][check_location.x][2] in [self.team, None]:
+                            if self.built_harvester[1] == None or check_location.distance_squared(self.core_pos) <= self.built_harvester[1].distance_squared(self.core_pos):
+                                can_build_harvester = True
+                                self.built_harvester[1] = check_location
 
             if not can_build_harvester:
                 print(f"Can not build Harvester at {ore}, removing from list.")
@@ -781,12 +782,15 @@ class Player:
                     #ct.resign()
                 return
 
-            if ore.distance_squared(self.pos) > 2:
+            if self.target == Position(1000, 1000) and ore.distance_squared(self.pos) > 2:
                 print(f"Ore is out of action range ({ore})")
                 self.target = ore
                 self.explore(ct, ore)
                 self.target = Position(1000, 1000)
                 return
+            elif self.target != Position(1000, 1000) and self.target.distance_squared(self.pos) > 2:
+                self.explore(ct)
+                self.target = Position(1000, 1000)
             
             if ore.distance_squared(self.pos) <= 2 and ore.distance_squared(self.core_pos) > 25**2:     # No point in connecting ores so far away as will cost a lot and probably go through an already clogged up route
                 print(f"Ore is too far away")
@@ -803,8 +807,17 @@ class Player:
                         print("ore is not in tit or ax!")
                         #ct.resign()
                 return
+            
+            for d in STRAIGHTS:
+                check_location = ore.add(d)
+                if check_location != self.built_harvester[1]:
+                    exists = True if 0 <= check_location.x < len(self.map[0]) and 0 <= check_location.y < len(self.map) else False
+                    if exists:
+                        is_not_wall = True if self.map[check_location.y][check_location.x][0] != Environment.WALL else False
+                        if is_not_wall and ((self.map[check_location.y][check_location.x][1] in [None, EntityType.ROAD] and self.map[check_location.y][check_location.x][2] in [None, self.team]) or self.map[check_location.y][check_location.x][1] == EntityType.MARKER):
+                            self.target = check_location
 
-            if ct.get_global_resources()[0] < ct.get_harvester_cost()[0] and ct.can_place_marker(ore):
+            if ct.get_global_resources()[0] < ct.get_harvester_cost()[0] and ct.can_place_marker(ore) and not (self.map[ore.y][ore.x][1] == EntityType.MARKER and self.map[ore.y][ore.x][2] == self.team):
                 print("Bagsying ORE")
                 marker_status = 10
                 bot_id = ct.get_id()
@@ -816,6 +829,19 @@ class Player:
                         + Y)
                 ct.place_marker(ore, message)
                 return
+            
+            elif self.target != Position(1000, 1000):   # Must add firing
+                if self.pos == self.target:
+                    for d in DIRECTIONS:
+                        if ct.can_build_road(self.pos.add(d)):
+                            ct.build_road(self.pos.add(d))
+                        if ct.can_move(d):
+                            ct.move(d)
+                if ct.can_destroy(self.target):
+                    ct.destroy(self.target)
+                if ct.can_build_barrier(self.target):
+                    ct.build_barrier(self.target)
+                    self.target = Position(1000, 1000)
 
             elif ct.get_global_resources()[0] >= ct.get_harvester_cost()[0]:
                 if ct.can_destroy(ore) and self.map[ore.y][ore.x][1] not in [EntityType.HARVESTER, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.SPLITTER, EntityType.FOUNDRY]:
@@ -915,8 +941,6 @@ class Player:
             else:
                 print("conveyor is better")
                 path = self.reconstruct_path(path_dict, best_end_tile)
-                for i in range(len(path)):
-                    ct.draw_indicator_dot(path[i], 0, 255, 0)
                 conveyor_dir = path[0].direction_to(path[1])
                 if self.map[path[0].y][path[0].x][2] != self.team:
                     move_dir = self.pos.direction_to(path[0])
