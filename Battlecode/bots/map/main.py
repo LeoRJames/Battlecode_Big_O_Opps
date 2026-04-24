@@ -349,7 +349,7 @@ class Player:
 
             tile = grid[ny][nx]
 
-            if tile[4] is not None and ct_pos.distance_squared(Position(cx, cy)) == 1:
+            if tile[4] is not None and ct_pos.distance_squared(Position(cx, cy)) == 1 and tile[1] != EntityType.CORE:
                 continue
             if avoid and 4 <= ((cx - self.core_pos.x)**2 + (cy - self.core_pos.y)**2) <= 8:   # Do not use tiles around core
                 continue
@@ -915,6 +915,8 @@ class Player:
             else:
                 print("conveyor is better")
                 path = self.reconstruct_path(path_dict, best_end_tile)
+                for i in range(len(path)):
+                    ct.draw_indicator_dot(path[i], 0, 255, 0)
                 conveyor_dir = path[0].direction_to(path[1])
                 if self.map[path[0].y][path[0].x][2] != self.team:
                     move_dir = self.pos.direction_to(path[0])
