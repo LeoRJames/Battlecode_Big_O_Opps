@@ -760,3 +760,90 @@ def exploring_the_map(self, ct, start=None):
                 self.explore(ct)
             # Find closest corner, move until it is in vision radius (covered by first if)
             ct.draw_indicator_dot(self.target, 255, 0, 0)
+
+def defence(self, ct):
+        print("DEFENCE")
+        self.target = self.core_pos
+        if ct.is_in_vision(self.core_pos) and ct.get_hp(ct.get_tile_building_id(self.core_pos)) < 500:
+            self.target = self.core_pos
+            if ct.can_heal(self.core_pos):
+                ct.heal(self.core_pos)
+            # Get back to core to heal
+            if self.map[self.pos.y][self.pos.x][1] != EntityType.CORE:
+                self.explore(ct)
+            return
+        
+        building_targets = None
+        pos = self.pos
+        vision_tiles = ct.get_nearby_tiles()
+        for i in vision_tiles:
+            
+            i_building = self.map[i.y][i.x][1]
+            i_team = self.map[i.y][i.x][2]
+            if i_building in [EntityType.SPLITTER] and i_team == self.team and self.core_pos.distance_squared(i) <= 5:
+                building_targets = [i.add(ct.get_direction(ct.get_tile_building_id(i))), i.add(ct.get_direction(ct.get_tile_building_id(i)).rotate_left().rotate_left()), i.add(ct.get_direction(ct.get_tile_building_id(i)).rotate_right().rotate_right())]
+            elif i_building in [EntityType.FOUNDRY] and i_team == self.team and self.core_pos.distance_squared(i) <= 5:
+                building_targets = [i.add(Direction.NORTH), i.add(Direction.WEST), i.add(Direction.EAST), i.add(Direction.SOUTH)]
+            elif 4 <= i.distance_squared(self.core_pos) <= 8 and building_targets == None and (i_building in [EntityType.ROAD, EntityType.BARRIER] or (i_team != self.team and i_building in [EntityType.ROAD, EntityType.CONVEYOR, EntityType.BRIDGE, EntityType.SPLITTER])):
+                self.target = i
+            elif i_building != None and ct.get_hp(ct.get_tile_building_id(i)) < ct.get_max_hp(ct.get_tile_building_id(i)) and i_team == self.team and building_targets == None:
+                self.target = i
+            if building_targets != None:
+                for building_target in building_targets:
+                    
+                    if 0 <= building_target.x < len(self.map[0]) and 0 <= building_target.y < len(self.map) and ct.is_in_vision(building_target) and ((i_building == EntityType.FOUNDRY and ct.get_entity_type(ct.get_tile_building_id(building_target)) not in [EntityType.CORE, EntityType.SPLITTER, EntityType.HARVESTER, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.FOUNDRY, EntityType.SENTINEL]) or (i_building == EntityType.SPLITTER and ct.get_entity_type(ct.get_tile_building_id(building_target)) not in [EntityType.CORE, EntityType.SPLITTER, EntityType.HARVESTER, EntityType.SENTINEL, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.FOUNDRY])) and ct.get_tile_env(building_target) != Environment.WALL:
+                        if ct.get_entity_type(ct.get_tile_building_id(building_target)) != EntityType.GUNNER or i_building != EntityType.SPLITTER or (ct.get_entity_type(ct.get_tile_building_id(building_target)) == EntityType.GUNNER and i_building == EntityType.SPLITTER and ct.get_sentinel_cost()[0] < ct.get_global_resources()[0]):
+                            if building_target.distance_squared(pos) < self.target.distance_squared(pos) or self.target == self.core_pos:
+                                self.target = building_target
+                                print(self.target)
+        
+        if pos == self.target and self.map[self.target.y][self.target.x][1] == None:
+            for d in DIRECTIONS:
+                if ct.can_move(d):
+                    ct.move(d)
+        
+        if self.pos.distance_squared(self.target) > 2:  # Move towards target to perform action
+            self.explore(ct)
+            return
+        # Must be on top of target for firing
+        elif self.pos.distance_squared(self.target) > 0 and self.map[self.target.y][self.target.x][1] in [EntityType.ROAD, EntityType.CONVEYOR, EntityType.BRIDGE, EntityType.SPLITTER] and self.map[self.target.y][self.target.x][2] != self.team:
+            self.explore(ct)
+            return
+
+        elif ct.can_heal(self.target) and self.map[self.target.y][self.target.x][1] != EntityType.ROAD:  # Heal if necessary
+            print("Healing")
+            ct.heal(self.target)
+            return
+        elif ct.can_destroy(self.target) and self.map[self.target.y][self.target.x][1] in [EntityType.ROAD, EntityType.BARRIER]: # Destroy own roads or barriers around core
+            ct.destroy(self.target)
+            return
+        elif ct.can_fire(self.target) and self.map[self.target.y][self.target.x][1] != self.team:    # Destroy enemy buildings around core
+            ct.fire(self.target)
+            return
+        elif self.target == self.core_pos:    # Algorithm to move in clockwise circle around core
+            if self.pos == self.target:
+                if ct.can_move(Direction.NORTH):
+                    ct.move(Direction.NORTH)
+            else:
+                dire = self.pos.direction_to(self.target)
+                if dire in DIAGONALS:
+                    if ct.can_move(dire.rotate_left()):
+                        ct.move(dire.rotate_left())
+                elif dire in STRAIGHTS:
+                    if ct.can_move(dire.rotate_left().rotate_left()):
+                        ct.move(dire.rotate_left().rotate_left())
+                else:
+                    print(dire)
+            return
+        elif self.target in vision_tiles:
+            for d in STRAIGHTS:
+                if self.map[self.target.y][self.target.x][1] == EntityType.GUNNER and ct.can_destroy(self.target) and ct.get_sentinel_cost()[0] <= ct.get_global_resources()[0]:
+                    ct.destroy(self.target)
+                if ( 0 <= self.target.add(d).y < ct.get_map_height() and 0 <= self.target.add(d).x < ct.get_map_width() and ct.get_tile_building_id(self.target.add(d)) is not None and
+                        ct.get_entity_type(ct.get_tile_building_id(self.target.add(d))) in [EntityType.SPLITTER, EntityType.FOUNDRY] and 
+                        ct.can_build_sentinel(self.target, self.target.direction_to(self.core_pos).opposite())):
+                    ct.build_sentinel(self.target, self.target.direction_to(self.core_pos).opposite())
+                elif ( 0 <= self.target.add(d).y < ct.get_map_height() and 0 <= self.target.add(d).x < ct.get_map_width() and ct.get_tile_building_id(self.target.add(d)) is not None and 
+                        ct.get_entity_type(ct.get_tile_building_id(self.target.add(d))) in [EntityType.SPLITTER, EntityType.FOUNDRY] and 
+                        ct.can_build_gunner(self.target, d.opposite())):
+                    ct.build_gunner(self.target, d.opposite())

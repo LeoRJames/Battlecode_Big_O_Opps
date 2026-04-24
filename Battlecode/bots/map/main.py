@@ -658,12 +658,14 @@ class Player:
                                 self.attack_enemy_core_close = False
                             self.target = self.enemy_core_pos
                             self.status = ATTACK_ENEMY_CORE
+                            self.explore_start = None
                             return
                     elif marker_status == 3:
                         self.enemy_core_pos = Position(target_x, target_y)
                         if marker_value_id == self.id:
                             self.target = self.enemy_core_pos
                             self.status = ATTACK_ENEMY_SUPPLY_LINES
+                            self.explore_start = None
                             return
                     elif marker_status == 5:
                         if marker_value_id == self.id:
@@ -676,6 +678,7 @@ class Player:
                     #return marker_value_id
         if self.status == INIT:
             self.status = DEFENCE
+            self.defence_mode = 10
             if sum([ 1 if ct.get_entity_type(i) == EntityType.BUILDER_BOT else 0 for i in ct.get_nearby_entities(5)]) > 4 and ct.get_hp(ct.get_tile_building_id(self.core_pos)) == ct.get_max_hp(ct.get_tile_building_id(self.core_pos)):
                 self.status = EXPLORING
 
@@ -1337,6 +1340,10 @@ class Player:
 
         wall_tile_y = target.y
         wall_tile_x = target.x
+        if not (wall_tile_y >= 0 and wall_tile_y < len(self.map) and wall_tile_x >= 0 and wall_tile_x < len(self.map[0])):
+            print("weird bug")
+            print(target)
+            return
         while wall_tile_y > 0 and self.map[wall_tile_y][wall_tile_x][0] != Environment.WALL:    # Check up/north to wall or edge of map
             wall_tile_y -= 1
         if self.map[wall_tile_y][wall_tile_x][0] != Environment.WALL:
@@ -1531,6 +1538,7 @@ class Player:
         if self.enemy_core_pos == Position(1000, 1000):
             self.target = Position(1000, 1000)
             self.status = EXPLORING
+            self.explore_start = None
             return
         if (self.target == Position(1000, 1000) or self.target == self.enemy_core_pos) and len(self.enemy_mined_tit) != 0:
             self.target = self.enemy_mined_tit[0]
@@ -1579,6 +1587,7 @@ class Player:
                     if len(self.enemy_mined_tit) == 0:
                         self.target = Position(1000, 1000)
                         self.status = EXPLORING
+                        self.explore_start = None
                     return
         if target_tile != None:
             self.target = target_tile
@@ -1592,6 +1601,7 @@ class Player:
             if len(self.enemy_mined_tit) == 0:
                 self.target = Position(1000, 1000)
                 self.status = EXPLORING
+                self.explore_start = None
             return
         else:
             if 0 < self.pos.distance_squared(self.target) <= 2 and (self.map[self.target.y][self.target.x][1] == None or (self.map[self.target.y][self.target.x][2] == self.team and self.map[self.target.y][self.target.x][1] in [EntityType.ROAD, EntityType.BARRIER]) ):
@@ -1607,6 +1617,7 @@ class Player:
                     if len(self.enemy_mined_tit) == 0:
                         self.target = Position(1000, 1000)
                         self.status = EXPLORING
+                        self.explore_start = None
                     return
             elif self.pos == self.target:
                 if self.map[self.target.y][self.target.x][1] == None:   # Move out of way and build sentinel
@@ -1625,6 +1636,7 @@ class Player:
                         if len(self.enemy_mined_tit) == 0:
                             self.target = Position(1000, 1000)
                             self.status = EXPLORING
+                            self.explore_start = None
                         return
                 elif ct.can_fire(self.target):
                     ct.fire(self.target)
@@ -1636,6 +1648,7 @@ class Player:
                 if len(self.enemy_mined_tit) == 0:
                     self.target = Position(1000, 1000)
                     self.status = EXPLORING
+                    self.explore_start = None
                 return
             # Non-passable enemy tile built on target tile or own building that do not want to destroy
             elif 0 < self.pos.distance_squared(self.target) <= 20 and ((self.map[self.target.y][self.target.x][2] != self.team and self.map[self.target.y][self.target.x][1] not in [EntityType.ROAD, EntityType.CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE]) or (self.map[self.target.y][self.target.x][2] in [self.team, None] and self.map[self.target.y][self.target.x][1] not in [EntityType.BARRIER, EntityType.MARKER, EntityType.ROAD, None])):
@@ -1654,6 +1667,8 @@ class Player:
          - 3 If buildings' health is low, heal!
          - 4 Reconnect broken conveyor paths
          - 5 If can build sentinel next to a splitter/foundry
+         - 6 Upgrade conveyors
+         - 7 Destroy roads and barriers next to core
          - 10 Unassigned/Default
 
         Reorder by changing the numbers below (untested):
@@ -1667,6 +1682,7 @@ class Player:
         build_defences = 5
         # Work in progress
         upgrade_conveyors = 6
+        destroy_roads = 7
 
         # If bot has low hp, heal + move (movement hopefully keeps it out of enemy fire)
         if ct.get_hp() < 0.5 * ct.get_max_hp() and False:
@@ -1771,7 +1787,7 @@ class Player:
             # Check if conveyor route home needs rebuilding
             elif i_building in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR] and ct.is_in_vision(i) and self.map[i.add(i_direction).y][i.add(i_direction).x][1] not in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE, EntityType.SENTINEL, EntityType.GUNNER] and self.defence_mode >= reconnect_conveyors:
                 print(i)
-                if ct.get_tile_builder_bot_id(i) is None and ct.get_stored_resource(ct.get_tile_building_id(i)) is not None or self.pos == i:
+                if ct.get_tile_builder_bot_id(i) is None and not (ct.is_in_vision(i.add(i_direction)) and ct.get_tile_builder_bot_id(i.add(i_direction)) is not None) and ct.get_stored_resource(ct.get_tile_building_id(i)) is not None or self.pos == i:
                     self.target = i
                     self.defence_mode = reconnect_conveyors
 
@@ -1795,6 +1811,10 @@ class Player:
                     self.defence_mode = upgrade_conveyors
                     print(i)
 
+            elif self.defence_mode >= destroy_roads and i.distance_squared(self.core_pos) <= 8 and (i_building in [EntityType.ROAD] or (i_building in [EntityType.BARRIER] and i_team == self.team)):
+                self.target = i
+                self.defence_mode = destroy_roads
+
             if building_targets is not None:
                 for building_target in building_targets:
                     if self.is_on_map(building_target) and ct.is_in_vision(building_target) and self.map[building_target.y][building_target.x][1] not in [EntityType.CORE, EntityType.SPLITTER, EntityType.HARVESTER, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.FOUNDRY, EntityType.SENTINEL, EntityType.GUNNER] and ct.get_tile_env(building_target) != Environment.WALL:
@@ -1804,7 +1824,7 @@ class Player:
                             print(self.target)
 
 
-        if self.pos.distance_squared(self.target) >= 4: # and self.defence_mode >= 3:
+        if self.pos.distance_squared(self.target) >= 4 and self.defence_mode != 10: # and self.defence_mode >= 3:
             print(f"Defence mode: {self.defence_mode}, target: ({self.target.x}, {self.target.y})")
             self.explore(ct)
             return
@@ -1924,9 +1944,39 @@ class Player:
                     ct.resign()
             self.defence_mode = 10
 
+        elif self.defence_mode == destroy_roads:
+            if self.pos.distance_squared(self.target) > 2:
+                self.explore(ct)
+            elif self.map[self.target.y][self.target.x][2] != self.team and self.pos != self.target:
+                self.explore(ct)
+            if ct.can_destroy(self.target):
+                ct.destroy(self.target)
+                self.defence_mode = 10
+            elif ct.can_fire(self.target):
+                ct.fire(self.target)
+                if ct.get_tile_building_id(self.target) == None:
+                    self.defence_mode = 10
         else:
             if ct.get_hp() < ct.get_max_hp() and ct.can_heal(self.pos):
                 ct.heal(self.pos)
+            if self.pos.distance_squared(self.core_pos) > 2:
+                self.target = self.core_pos
+                self.explore(ct)
+            else:
+                if self.pos == self.core_pos:
+                    if ct.can_move(Direction.NORTH):
+                        ct.move(Direction.NORTH)
+                else:
+                    dire = self.pos.direction_to(self.core_pos)
+                    if dire in DIAGONALS:
+                        if ct.can_move(dire.rotate_left()):
+                            ct.move(dire.rotate_left())
+                    elif dire in STRAIGHTS:
+                        if ct.can_move(dire.rotate_left().rotate_left()):
+                            ct.move(dire.rotate_left().rotate_left())
+                    else:
+                        print(dire)
+                return
             # Add some feature to roam about (leo's new thingy)
             print("Nothing to do!", self.defence_mode)
             # Very basic explore algorithm
@@ -1953,6 +2003,7 @@ class Player:
     def foundry(self, ct):
         if self.target == Position(1000, 1000):
             self.status = DEFENCE
+            self.defence_mode = 10
             return
         if self.pos.distance_squared(self.target) > 2:
             self.explore(ct)
@@ -1986,6 +2037,7 @@ class Player:
                     self.splitter_resource[self.target] = False
                     self.target = Position(1000, 1000)
                     self.status = DEFENCE
+                    self.defence_mode = 10
                 else:
                     self.splitter_target = self.target
                     self.target = chosen_tile
@@ -1993,6 +2045,7 @@ class Player:
             elif self.map[self.target.y][self.target.x][1] == EntityType.BRIDGE:
                 if ct.get_splitter_cost()[0] > ct.get_global_resources()[0]:
                     self.status = DEFENCE
+                    self.defence_mode = 10
                     return
                 if ct.can_destroy(self.target):
                     ct.destroy(self.target)
@@ -2033,6 +2086,7 @@ class Player:
                     self.splitter_target = None
                     self.target = Position(1000, 1000)
                     self.status = DEFENCE
+                    self.defence_mode = 10
                     return
                 elif self.map[self.target.y][self.target.x][1] not in [EntityType.SPLITTER, EntityType.HARVESTER, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.FOUNDRY] and ct.can_destroy(self.target):
                     checks = [(-1, 0), (1, 0), (0, -1), (0, 1)]
@@ -2051,12 +2105,14 @@ class Player:
                         self.splitter_resource[self.target] = False
                         self.target = Position(1000, 1000)
                         self.status = DEFENCE
+                        self.defence_mode = 10
                 if ct.can_build_foundry(self.target):
                     ct.build_foundry(self.target)
                     self.splitter_resource[self.splitter_target] = False
                     self.splitter_target = None
                     self.target = Position(1000, 1000)
                     self.status = DEFENCE
+                    self.defence_mode = 10
                     return
 
     def gn_init(self,ct):
@@ -2068,9 +2124,11 @@ class Player:
                     self.status = ATTACK_ENEMY_CORE
                 else:
                     self.status = DEFENCE
+                    self.defence_mode = 10
                 print(self.status)
                 return
         self.status = DEFENCE
+        self.defence_mode = 10
         print("Defence")
 
     def gn_attack_enemy_core(self, ct):
@@ -2215,6 +2273,7 @@ class Player:
                 self.explore_start = None
                 if self.enemy_core_pos == Position(1000, 1000):
                     self.status = DEFENCE
+                    self.defence_mode = 10
                 else:
                     self.status = ATTACK_ENEMY_CORE
                 return
@@ -2260,6 +2319,7 @@ class Player:
                     ct.place_marker(pos.add(i), message)
                     if len(self.enemy_mined_tit) != 0:  # Try to get early attack in
                         self.status = ATTACK_ENEMY_SUPPLY_LINES
+                        self.explore_start = None
                     else:
                         self.status = EXPLORING
                     print("Reported Enemy Core Location back to Base")
@@ -2443,12 +2503,14 @@ class Player:
                 elif len(self.enemy_mined_tit) != 0 and self.enemy_core_pos != Position(1000, 1000):
                     self.target = Position(1000, 1000)
                     self.status = ATTACK_ENEMY_SUPPLY_LINES
+                    self.explore_start = None
                 elif (len(self.tit) == 0 and ct.get_global_resources()[0] < 500) or (len(self.ax) == 0 and ct.get_global_resources()[1] == 0) or (len(self.attacked_enemy_mined_tit) < 3):
                     print("Search for more to do")
                     self.exploring_the_map(ct)
                 else:
                     self.target = Position(1000, 1000)
                     self.status = ATTACK_ENEMY_CORE
+                    self.explore_start = None
 
             elif self.status == MINING_TITANIUM:  # Mining ore
                 print("Mining")
@@ -2484,6 +2546,7 @@ class Player:
                 elif self.enemy_core_pos != Position(1000, 1000) and not (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000):
                     self.target = Position(1000, 1000)
                     self.status = ATTACK_ENEMY_SUPPLY_LINES
+                    self.explore_start = None
                 else:
                     self.target = Position(1000, 1000)
                     self.status = EXPLORING
