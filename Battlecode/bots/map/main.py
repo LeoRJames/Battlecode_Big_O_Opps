@@ -1727,9 +1727,14 @@ class Player:
                 for j in DIRECTIONS:
                     tile = i.add(j)
                     if not(self.is_on_map(tile)):
-                        break
+                        pass
+
                     map_tile = self.map[tile.y][tile.x]
-                    if map_tile[1] in [EntityType.GUNNER, EntityType.SENTINEL] and map_tile[2] == self.team and map_tile[3] == j.opposite():
+
+                    if map_tile[0] == Environment.WALL:
+                        pass
+
+                    if map_tile[1] in [EntityType.GUNNER, EntityType.SENTINEL] and map_tile[2] == self.team and map_tile[3][0] == j.opposite():
                         print("Defence already built!")
                         break
 
