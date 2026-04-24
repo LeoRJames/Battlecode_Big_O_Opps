@@ -1622,7 +1622,7 @@ class Player:
                     self.defence_mode = upgrade_conveyors
                     print(i)
 
-            elif self.defence_mode >= destroy_roads and i.distance_squared(self.core_pos) <= 8 and (i_building in [EntityType.ROAD] or (i_building in [EntityType.BARRIER] and i_team == self.team)):
+            elif self.defence_mode >= destroy_roads and i.distance_squared(self.core_pos) <= 8 and ((i_building in [EntityType.ROAD] and i_team == self.team) or (i_building in [EntityType.ROAD] and i_team != self.team and ct.get_global_resources()[0] > 500) or (i_building in [EntityType.BARRIER] and i_team == self.team)):
                 self.target = i
                 self.defence_mode = destroy_roads
 
