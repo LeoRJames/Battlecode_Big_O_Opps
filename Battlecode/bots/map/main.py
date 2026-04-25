@@ -21,6 +21,7 @@ MINING_TITANIUM = 2
 DEFENCE = 7
 ATTACK_ENEMY_SUPPLY_LINES = 5
 FOUNDRY = 6
+MOVING_TURRET = 8
 
 class Player:
     def __init__(self):
@@ -1225,6 +1226,10 @@ class Player:
                 self.pathfinder_fail_count = 0
             return
         path = self.reconstruct_path(path_dict, best_end_tile)
+        if len(path) < 2:
+            print("NO PATH", path)
+            self.status = EXPLORING
+            return
         path_dict, cost, best_end_tile = self.pathfinder(ct, path[1], path[0], conv=True, avoid=True)
         if best_end_tile != path[1] or ct.get_bridge_cost()[0] < cost[best_end_tile] * ct.get_conveyor_cost()[0] :
             print("Bridge Path is Better!")
@@ -1263,8 +1268,7 @@ class Player:
                 move_dir = self.pos.direction_to(path[0])
                 if ct.can_move(move_dir):
                     ct.move(move_dir)
-                else:
-                    self.target = path[0]
+                self.target = path[0]
             elif self.map[path[0].y][path[0].x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE] and self.map[path[0].y][path[0].x][2] == self.team:
                 move_dir = self.pos.direction_to(path[0])
                 if ct.can_move(move_dir):
@@ -1539,37 +1543,49 @@ class Player:
                 start = harv
         return start
     
-    def moving_turret_end(self, end, start, radii):   # radii: sentinel = 32, gunners = 9, builder bot = 20
-        
+    def moving_turret_end(self, end, start, radii):   # radii: sentinel = 32, gunners = 9
+
+        vision = self.centre_vision(end, radii)
         result = None
-        radii = int(radii**0.5)
+
+        for coord in vision:
+
+            tile = self.map[coord[1]][coord[0]]
+            if tile[0] != Environment.WALL and (tile[2] == None or (tile[2] != self.team and tile[1] in [EntityType.ROAD, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.MARKER]) or (tile[2] == self.team and tile[1] not in [EntityType.HARVESTER, EntityType.FOUNDRY, EntityType.CORE])):
+                if result == None or self.tuple_distance_squared(start, (coord[0], coord[1])) < self.tuple_distance_squared(start, result):
+                    result = (coord[0], coord[1])
+
+        return result
+    
+    def centre_vision(self, centre, radii):    # Pass centre tuple; radii: sentinel = 32, gunners = 9, builder bot = 20
+        result = []
+        rootRadii = int(radii**0.5)
         width = len(self.map[0])
         height = len(self.map)
 
-        for dx in range(-radii, radii + 1):
-            for dy in range(-radii, radii + 1):
+        for dx in range(-rootRadii, rootRadii+1):
+            for dy in range(-rootRadii, rootRadii+1):
                 if dx*dx + dy*dy <= radii:
-                    x = end.x + dx
-                    y = end.y + dy
-
+                    x = centre[0] + dx
+                    y = centre[1] + dy
                     if not (0 <= x < width):
                         continue
                     if not (0 <= y < height):
                         continue
-
-                    tile = self.map[y][x]
-                    if tile[0] != Environment.WALL and (tile[2] == None or (tile[2] != self.team and tile[1] in [EntityType.ROAD, EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.MARKER]) or (tile[2] == self.team and tile[1] not in [EntityType.HARVESTER, EntityType.FOUNDRY, EntityType.CORE])):
-                        if result == None or self.tuple_distance_squared(start, (x, y)) < self.tuple_distance_squared(start, result):
-                            result = (x, y)
-
-        return result
+                    result.append((x, y))
+        
+        return result   # Return list of tuples representing all tiles on map within a radii of a centre point
 
     def moving_turret(self, ct, end, start=None):
         if start == None:
             start = self.moving_turret_start(ct, end)
+            if start == None:
+                print("No start position")
+                self.moving_turret_supply = False
+                return
 
         radii = 32
-        end_pos = self.moving_turret_end(self, ct, end, (start.x, start.y), radii) # Sentinel
+        end_pos = self.moving_turret_end(end, (start.x, start.y), radii) # Sentinel
         if end_pos == None:
             print("No end position")
             self.moving_turret_supply = False
@@ -1598,21 +1614,32 @@ class Player:
                     if tile[0] == Environment.WALL:
                         continue
                     if tile[1] == None:
-                        target = tile
+                        target = check
                         break
                     elif tile[1] in [EntityType.ROAD, EntityType.BARRIER] and tile[2] == self.team:
-                        target = tile
+                        target = check
                     elif tile[1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR] and target == None:
-                        target = tile
+                        target = check
                 if target == None:
                     print("No end position")
                     return
                 self.target = target
-                if self.pos != self.target:
+                if self.map[self.target.y][self.target.x][1] == EntityType.BARRIER and self.pos.distance_squared(self.target) > 2:
                     self.explore(ct)
                     return
-            if self.pos == self.target:
-                if ct.can_destroy(self.target):
+                elif self.map[self.target.y][self.target.x][1] != EntityType.BARRIER and self.pos != self.target:
+                    self.explore(ct)
+                    return
+            if self.pos == self.target or (self.map[self.target.y][self.target.x][1] == EntityType.BARRIER and self.pos.distance_squared(self.target) <= 2):
+                if self.map[self.target.y][self.target.x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR] and self.map[self.target.y][self.target.x][2] == self.team:
+                    if ct.can_destroy(self.target) and ct.get_splitter_cost()[0] > ct.get_global_resources()[0]:
+                        ct.destroy(self.target)
+                        if ct.can_build_splitter(self.target, self.map[self.target.y][self.target.x][3][0]):    # Can do this as map only updates at start of turn
+                            ct.build_splitter(self.target, self.map[self.target.y][self.target.x][3][0])        # Will now run through above again to decide where to start conveyor path
+                        else:
+                            print("CANNOT BUILD SPLITTER")
+                        return
+                elif ct.can_destroy(self.target):
                     ct.destroy(self.target)
                     return
                 elif ct.can_fire(self.target):
@@ -1624,10 +1651,143 @@ class Player:
         # LOOK AT VISION RADIUS FOR ENEMY TILES (USE FUNCTION JUST ABOVE FOR THIS NOT CT ONE)
         # IF ENEMY TURRETS OR SUPPLY LINES THEN BUILD SENTINEL TO DESTROY THEM AT END OF MOVING TURRET PATH (OBVIOUSLY JUST WAIT IF THERE IS ALREADY A SENTINEL)
         # IF AT ENEMY CORE THEN BUILD TURRET AND MOVE ON
-        self.transport_resources(ct, end_pos)
-
+        bot_vision = self.centre_vision(self.pos, 20)
+        sentinel_target = None
+        for coord in bot_vision:
+            print(coord)
+            tile = self.map[coord[1]][coord[0]]
+            if tile[1] == EntityType.SENTINEL and tile[2] != self.team and self.pos in ct.get_attackable_tiles_from(Position(coord[0], coord[1]), tile[3][0], EntityType.SENTINEL):
+                sentinel_target = coord
+                break
+            elif tile[1] in [EntityType.SENTINEL, EntityType.GUNNER, EntityType.BREACH, EntityType.LAUNCHER] and tile[2] != self.team:
+                sentinel_target = coord
+            elif sentinel_target == None and tile[1] in [EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR, EntityType.BRIDGE, EntityType.SPLITTER, EntityType.FOUNDRY, EntityType.BARRIER] and tile[2] != self.team:
+                sentinel_target = coord
+        if sentinel_target == None:
+            if (end.x, end.y) in self.centre_vision(self.pos, 20) and self.map[end.y][end.x][2] != self.team:
+                sentinel_target = Position(end.x, end.y)
+            elif (end.x, end.y) in self.centre_vision(self.pos, 20) and not self.map[end.y][end.x][2] != self.team:
+                self.moving_turret_supply = False
+                self.status = ATTACK_ENEMY_CORE # Temporary, should have more checks
+                return
+            else:
+                if self.map[self.target.y][self.target.x][1] == EntityType.SENTINEL and self.map[self.target.y][self.target.x][2] == self.team:
+                    if self.pos.distance_squared(self.target) > 2:
+                        self.explore(ct)
+                    if ct.can_destroy(self.target):
+                        ct.destroy(self.target)
+                        self.transport_resources(ct, Position(end_pos[0], end_pos[1]))
+                    return
+                elif self.map[self.target.y][self.target.x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR]:
+                    possible_sentinel_pos = self.target.add(self.map[self.target.y][self.target.x][3][0])
+                    if self.map[possible_sentinel_pos.y][possible_sentinel_pos.x][1] == EntityType.SENTINEL and self.map[possible_sentinel_pos.y][possible_sentinel_pos.x][2] == self.team:
+                        if self.pos.distance_squared(possible_sentinel_pos) > 2:
+                            temp = self.target
+                            self.target = possible_sentinel_pos
+                            self.explore(ct)
+                            self.target = temp
+                        if ct.can_destroy(possible_sentinel_pos):
+                            ct.destroy(possible_sentinel_pos)
+                            self.transport_resources(ct, Position(end_pos[0], end_pos[1]))
+                    else:
+                        self.transport_resources(ct, Position(end_pos[0], end_pos[1]))
+                    return
+                else:
+                    self.transport_resources(ct, Position(end_pos[0], end_pos[1]))
+                    return
+        else:
+            sentinel_target = Position(sentinel_target[0], sentinel_target[1])
+        print(sentinel_target)
+        if self.map[self.target.y][self.target.x][1] in [None, EntityType.ROAD] and self.pos == self.target:
+            for d in DIRECTIONS:    # Try to move without building first so that can build sentinel on same turn
+                next = self.pos.add(d)
+                vision_next = self.centre_vision((next.x, next.y), 20)
+                if (sentinel_target.x, sentinel_target.y) in vision_next:
+                    if ct.can_move(d):
+                        ct.move(d)
+                        break
+            if self.pos == self.target: # If could not move without building then build sentinel on next turn
+                for d in DIRECTIONS:
+                    next = self.pos.add(d)
+                    vision_next = self.centre_vision((next.x, next.y), 20)
+                    if (sentinel_target.x, sentinel_target.y) in vision_next:
+                        if ct.can_build_road(self.pos.add(d)):
+                            ct.build_road(self.pos.add(d))
+                        if ct.can_move(d):
+                            ct.move(d)
+                            break
+            if self.pos == self.target and ct.get_road_cost()[0] > ct.get_global_resources()[0]: # If could not move then and could afford road just continue path
+                self.transport_resources(ct, Position(end_pos[0], end_pos[1]))
+            elif ct.get_action_cooldown() == 0:
+                if ct.can_build_sentinel(self.target, self.target.direction_to(sentinel_target)):
+                    ct.build_sentinel(self.target, self.target.direction_to(sentinel_target))
+                else:
+                    print("waiting to build sentinel")
+                    return
+        elif self.map[self.target.y][self.target.x][1] in [None, EntityType.ROAD] and 0 < self.pos.distance_squared(self.target) <= 2:
+            if sentinel_target in ct.get_attackable_tiles_from(self.target, self.target.direction_to(sentinel_target), EntityType.SENTINEL):
+                if ct.can_destroy(self.target):
+                    ct.destroy(self.target)
+                if ct.can_build_sentinel(self.target, self.target.direction_to(sentinel_target)):
+                    ct.build_sentinel(self.target, self.target.direction_to(sentinel_target))
+                else:
+                    print("waiting for money to build sentinel")
+                    return
+            else:
+                self.transport_resources(ct, Position(end_pos[0], end_pos[1]))
+        elif self.map[self.target.y][self.target.x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR]:
+            sentinel_pos = self.target.add(self.map[self.target.y][self.target.x][3][0])
+            if self.map[sentinel_pos.y][sentinel_pos.x][1] == EntityType.SENTINEL:
+                attackable_tiles = ct.get_attackable_tiles_from(sentinel_pos, self.map[sentinel_pos.y][sentinel_pos.x][3][0], EntityType.SENTINEL)
+                if sentinel_target not in attackable_tiles:
+                    print("change pos")
+                    if self.pos.distance_squared(sentinel_pos) > 2:
+                        print("Moving to sentinel_pos:", sentinel_pos)
+                        temp = self.target
+                        self.target = sentinel_pos
+                        self.explore(ct)
+                        self.target = temp
+                    if ct.can_destroy(sentinel_pos):
+                        ct.destroy(sentinel_pos)
+                    if ct.can_build_sentinel(sentinel_pos, sentinel_pos.direction_to(sentinel_target)):
+                        ct.build_sentinel(sentinel_pos, sentinel_pos.direction_to(sentinel_target))
+                    else:
+                        print("Waiting for money or too far away to build sentinel 1")
+                elif Position(end[0], end[1]) in attackable_tiles or self.map[end[1]][end[0]]:
+                    self.moving_turret_supply = False
+                    return
+            else:
+                if sentinel_target in ct.get_attackable_tiles_from(sentinel_pos, sentinel_pos.direction_to(sentinel_target), EntityType.SENTINEL):
+                    if self.pos.distance_squared(sentinel_pos) > 2:
+                        print("Moving to sentinel_pos:", sentinel_pos)
+                        temp = self.target
+                        self.target = sentinel_pos
+                        self.explore(ct)
+                        self.target = temp
+                    if self.map[sentinel_pos.y][sentinel_pos.x][1] in [EntityType.ROAD, None] and self.map[sentinel_pos.y][sentinel_pos.x][2] == self.team and ct.can_destroy(sentinel_pos):
+                        ct.destroy(sentinel_pos)
+                    if ct.can_build_sentinel(sentinel_pos, sentinel_pos.direction_to(sentinel_target)):
+                        ct.build_sentinel(sentinel_pos, sentinel_pos.direction_to(sentinel_target))
+                    else:
+                        print("Waiting for money or too far away to build sentinel 2")
+                else:
+                    self.transport_resources(ct, Position(end_pos[0], end_pos[1]))
+        elif self.map[self.target.y][self.target.x][1] == EntityType.SENTINEL and 0 < self.pos.distance_squared(self.target) <= 2:
+            attackable_tiles = ct.get_attackable_tiles_from(self.target, self.map[self.target.y][self.target.x][3][0], EntityType.SENTINEL)
+            if sentinel_target not in attackable_tiles:
+                print("change pos")
+                if ct.can_destroy(self.target):
+                    ct.destroy(self.target)
+                if ct.can_build_sentinel(self.target, self.target.direction_to(sentinel_target)):
+                    ct.build_sentinel(self.target, self.target.direction_to(sentinel_target))
+            elif Position(end_pos[0], end_pos[1]) in attackable_tiles:
+                self.moving_turret_supply = False
+                return
+        elif self.pos.distance_squared(self.target) > 2:
+            self.explore(ct)
+        
     def is_on_map(self, tile):
-        return 0 <= tile.x < len(self.map[0]) and 0 <= tile.y < len(self.map)
+        return True if (0 <= tile.x < len(self.map[0]) and 0 <= tile.y < len(self.map)) else False
 
     def defence(self, ct):
         '''
@@ -1713,7 +1873,7 @@ class Player:
                 for j in DIRECTIONS:
                     tile = i.add(j)
                     if not(self.is_on_map(tile)):
-                        pass
+                        continue
 
                     map_tile = self.map[tile.y][tile.x]
 
@@ -1950,11 +2110,15 @@ class Player:
             # Add some feature to roam about (leo's new thingy)
             print("Nothing to do!", self.defence_mode)
             # Very basic explore algorithm
-
+        '''
         # Destroy roads around the core (to give space for markers) - dubious - may use up titanium
         if self.pos.distance_squared(self.core_pos) < 4:
+            width = len(self.map[0])
+            height = len(self.map)
             for i in DIRECTIONS:
                 tile = self.pos.add(i)
+                if not (0 <= tile.x < width and 0 <= tile.y < height):
+                    continue
                 if self.map[tile.y][tile.x][1] == EntityType.ROAD:
                     if ct.can_destroy(tile):
                         ct.destroy(tile)
@@ -1963,7 +2127,7 @@ class Player:
                         if ct.can_move(i):
                             ct.move(i)
                             if ct.can_fire(tile):
-                                ct.fire(tile)
+                                ct.fire(tile)'''
 
         if self.pos == self.target and self.target != self.core_pos:
             for d in DIRECTIONS:
@@ -2515,8 +2679,12 @@ class Player:
                     self.ore_target = closest_ax
                     ct.draw_indicator_line(self.pos, closest_ax, 0, 255, 0)
                 elif self.enemy_core_pos != Position(1000, 1000) and not (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000):
+                    if self.map[self.enemy_core_pos.y][self.enemy_core_pos.x][1] == 0:
+                        self.status = ATTACK_ENEMY_SUPPLY_LINES
+                    else:
+                        self.moving_turret_supply = False
+                        self.status = MOVING_TURRET
                     self.target = Position(1000, 1000)
-                    self.status = ATTACK_ENEMY_SUPPLY_LINES
                     self.explore_start = None
                 else:
                     self.target = Position(1000, 1000)
@@ -2537,6 +2705,10 @@ class Player:
                 print("Attack enemy supply lines")
                 print(self.target)
                 self.attack_enemy_supply_lines(ct)
+
+            elif self.status == MOVING_TURRET:
+                print("Moving turret")
+                self.moving_turret(ct, self.enemy_core_pos)
 
             elif self.status == FOUNDRY:    # Defence fixes broken connections
                 print("FOUNDRY")
