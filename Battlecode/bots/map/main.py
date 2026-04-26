@@ -69,6 +69,8 @@ class Player:
         self.defence_mode = 10
         self.defence_target = Position(1000, 1000)
         self.moving_turret_supply = False
+        self.find_enemy_core_target = None
+        self.mined_tit_count = 0
 
     def initialise_map(self, ct):   # Set up 2d array for each tile on map each storing a list of three info pieces (tile type, building, team)
         self.team = ct.get_team()
@@ -754,6 +756,8 @@ class Player:
 
             # Checks if another bot has claimed the ore or there is a possible place to put conveyor next to harvester
             can_build_harvester = False
+            if self.built_harvester[1] != None and self.built_harvester[1].distance_squared(ore) > 1:
+                self.built_harvester[1] = None
             if ct.get_entity_type(ct.get_tile_building_id(ore)) == EntityType.MARKER and ct.get_team(ct.get_tile_building_id(ore)) == self.team:
                 marker_value = ct.get_marker_value(ct.get_tile_building_id(ore))
                 marker_value_id = (marker_value % (2 ** 28)) // (2 ** 12)
@@ -839,7 +843,7 @@ class Player:
                             ct.build_road(self.pos.add(d))
                         if ct.can_move(d):
                             ct.move(d)
-                if ct.can_destroy(self.target):
+                if ct.can_destroy(self.target) and self.map[self.target.y][self.target.x][1] in [EntityType.ROAD] and self.map[self.target.y][self.target.x][2] == self.team:
                     ct.destroy(self.target)
                 if ct.can_build_barrier(self.target):
                     ct.build_barrier(self.target)
@@ -957,6 +961,7 @@ class Player:
                     if ct.can_build_splitter(path[0], splitter_dir):
                         ct.build_splitter(path[0], splitter_dir)
                         print("Path Building Complete")
+                        self.mined_tit_count += 1
                         self.built_harvester = [False, None, None]
                         self.ore_target = None
                         self.pathfinder_fail_count = 0
@@ -1018,6 +1023,7 @@ class Player:
 
             if self.map[path[1].y][path[1].x][1] in [EntityType.CORE, EntityType.SPLITTER, EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR, EntityType.BRIDGE]:
                 print("Path Building Complete")
+                self.mined_tit_count += 1
                 self.built_harvester = [False, None, None]
                 self.ore_target = None
                 self.pathfinder_fail_count = 0
@@ -1194,18 +1200,27 @@ class Player:
                 self.unreachable_tiles.append(Position(tile[0], tile[1]))
 
     def find_enemy_core(self, ct):
-        if self.enemy_core_pos == Position(1000, 1000) and self.target != Position(1000, 1000) and self.map[self.target.y][self.target.x][0] == 0:
+        if len(self.tit) > 0 and self.mined_tit_count == 0:
+            self.find_enemy_core_target = self.target
+            self.status = MINING_TITANIUM
+        elif self.find_enemy_core_target != None:
+            self.target = self.find_enemy_core_target
+            self.find_enemy_core_target = None
+        elif self.enemy_core_pos == Position(1000, 1000) and self.target != Position(1000, 1000) and self.map[self.target.y][self.target.x][0] == 0:
             self.explore(ct, self.target)
         elif self.enemy_core_pos != Position(1000, 1000):  # Report enemy core position back to core
+            self.find_enemy_core_target = None
             self.status = REPORT_ENEMY_CORE_LOCATION
         elif len(self.tit + self.ax) != 0:    # Mine for ore
+            self.find_enemy_core_target = None
             self.status = MINING_TITANIUM
             self.target = Position(1000, 1000)
         else:   # Explore from outside corner in
+            self.find_enemy_core_target = None
             self.status = EXPLORING
             self.target = Position(1000, 1000)
-        if ct.get_current_round() > 200:
-            self.status = EXPLORING
+        #if ct.get_current_round() > 200:
+            #self.status = EXPLORING
 
     def transport_resources(self, ct, end, start=None):
         if start == None:
@@ -1809,13 +1824,13 @@ class Player:
         destroy_turret = 2
         heal = 3
         reconnect_conveyors = 4
-        build_defences = 5
+        build_defences = 5 #5
         # Work in progress
         upgrade_conveyors = 6
         destroy_roads = 7
 
         # If bot has low hp, heal + move (movement hopefully keeps it out of enemy fire)
-        if ct.get_hp() < 0.5 * ct.get_max_hp() and False:
+        if ct.get_hp() < 0.5 * ct.get_max_hp():
             print("Running and healing")
             d = DIRECTIONS.copy()
             random.shuffle(d)
@@ -1941,7 +1956,7 @@ class Player:
                     self.defence_mode = upgrade_conveyors
                     print(i)
 
-            elif self.defence_mode >= destroy_roads and i.distance_squared(self.core_pos) <= 8 and ((i_building in [EntityType.ROAD] and i_team == self.team) or (i_building in [EntityType.ROAD] and i_team != self.team and ct.get_global_resources()[0] > 500) or (i_building in [EntityType.BARRIER] and i_team == self.team)):
+            elif self.defence_mode >= destroy_roads and self.pos.distance_squared(self.core_pos) <= 2 and i.distance_squared(self.core_pos) <= 8 and ((i_building in [EntityType.ROAD] and i_team == self.team) or (i_building in [EntityType.ROAD] and i_team != self.team and ct.get_global_resources()[0] > 500) or (i_building in [EntityType.BARRIER] and i_team == self.team)):
                 self.target = i
                 self.defence_mode = destroy_roads
 
@@ -2064,14 +2079,14 @@ class Player:
 
         elif self.defence_mode == upgrade_conveyors:
             print(f"Defence_mode 6: Upgrading {self.target}")
-            if self.map[self.target.y][self.target.x][1] == EntityType.CONVEYOR and ct.can_destroy(self.target):
+            if self.map[self.target.y][self.target.x][1] == EntityType.CONVEYOR and ct.can_destroy(self.target) and ct.get_armoured_conveyor_cost()[0] >= ct.get_global_resources()[0] and ct.get_armoured_conveyor_cost()[1] >= ct.get_global_resources()[1]:
                 direction = self.map[self.target.y][self.target.x][3][0]
                 ct.destroy(self.target)
                 ct.draw_indicator_line(self.pos, self.core_pos, 0, 0, 0)
                 if ct.can_build_armoured_conveyor(self.target, direction):
                     ct.build_armoured_conveyor(self.target, direction)
-                else:
-                    ct.resign()
+                #else:
+                    #ct.resign()
             self.defence_mode = 10
 
         elif self.defence_mode == destroy_roads:
@@ -2469,9 +2484,6 @@ class Player:
 
     def run(self, ct: Controller) -> None:
 
-        #if ct.get_current_round() > 500:
-        #    ct.resign()
-
         etype = ct.get_entity_type()
 
         if etype == EntityType.CORE:
@@ -2649,6 +2661,9 @@ class Player:
 
             elif self.status == MINING_TITANIUM:  # Mining ore
                 print("Mining")
+                if self.find_enemy_core_target != None and ((len(self.tit) == 0 and self.built_harvester[0] == False) or (self.mined_tit_count != 0 and self.built_harvester[0] == False)):
+                    self.status = FIND_ENEMY_CORE
+                    return
                 if self.ore_target is not None or self.built_harvester[0]:
                     if self.built_harvester[0] or self.ore_target in self.tit + self.ax:
                         if self.ore_target in self.unreachable_tiles:
@@ -2679,11 +2694,12 @@ class Player:
                     self.ore_target = closest_ax
                     ct.draw_indicator_line(self.pos, closest_ax, 0, 255, 0)
                 elif self.enemy_core_pos != Position(1000, 1000) and not (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000):
-                    if self.map[self.enemy_core_pos.y][self.enemy_core_pos.x][1] == 0:
+                    '''if self.map[self.enemy_core_pos.y][self.enemy_core_pos.x][1] == 0:
                         self.status = ATTACK_ENEMY_SUPPLY_LINES
                     else:
                         self.moving_turret_supply = False
-                        self.status = MOVING_TURRET
+                        self.status = MOVING_TURRET'''
+                    self.status = ATTACK_ENEMY_SUPPLY_LINES
                     self.target = Position(1000, 1000)
                     self.explore_start = None
                 else:
