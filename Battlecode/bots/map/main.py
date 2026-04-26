@@ -2094,7 +2094,7 @@ class Player:
                 self.explore(ct)
             elif self.map[self.target.y][self.target.x][2] != self.team and self.pos != self.target:
                 self.explore(ct)
-            if ct.can_destroy(self.target):
+            if ct.can_destroy(self.target) and self.map[self.target.y][self.target.x][1] in [EntityType.ROAD, EntityType.BARRIER]:
                 ct.destroy(self.target)
                 self.defence_mode = 10
             elif ct.can_fire(self.target):
