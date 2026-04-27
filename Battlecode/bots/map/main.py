@@ -776,8 +776,8 @@ class Player:
             if not can_build_harvester:
                 print(f"Can not build Harvester at {ore}, removing from list.")
                 self.ore_target = None
-                if self.map[ore.y][ore.x][4] == None:
-                    self.unreachable_ores.append(ore)
+                #if self.map[ore.y][ore.x][4] == None or (self.map[ore.y][ore.x][4] != None and ct.get_team(ct.get_tile_builder_bot_id(ore)) != self.team):
+                self.unreachable_ores.append(ore)
                 if ore in self.tit:
                     self.tit.remove(ore)
                 elif ore in self.ax:
@@ -879,7 +879,7 @@ class Player:
                     return
                 self.built_harvester[1] = None
 
-            if self.built_harvester[2] in self.mined_tit and len(self.mined_tit) > 12 and self.try_avoid:
+            if self.built_harvester[2] in self.mined_tit and (len(self.mined_tit) % 5) == 0 and self.try_avoid:
                 if self.map[self.pos.y][self.pos.x][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR, EntityType.SPLITTER] and self.map[self.pos.y][self.pos.x][2] == self.team:
                     path_dict, cost, best_end_tile = self.pathfinder(ct, self.core_pos, start=self.pos.add(self.map[self.pos.y][self.pos.x][3][0]), bridge=True, avoid=True)
                 else:
@@ -930,7 +930,7 @@ class Player:
             ct.draw_indicator_line(path[1], path[0], 0, 0, 0)
 
             # Now find conveyor route to next best bridge location
-            if self.built_harvester[2] in self.mined_tit and len(self.mined_tit) > 12 and self.try_avoid:
+            if self.built_harvester[2] in self.mined_tit and (len(self.mined_tit) % 5) == 0 and self.try_avoid:
                 path_dict, cost, best_end_tile = self.pathfinder(ct, path[1], path[0], conv=True, avoid=True)
             else:
                 path_dict, cost, best_end_tile = self.pathfinder(ct, path[1], path[0], conv=True)
