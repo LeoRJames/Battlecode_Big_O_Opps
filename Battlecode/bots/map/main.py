@@ -3012,7 +3012,7 @@ class Player:
                     self.ore_target = closest_ax
                     ct.draw_indicator_line(self.pos, closest_ax, 0, 255, 0)
                 #self.enemy_core_pos != Position(1000, 1000) and 
-                elif len(self.mined_tit) > 4 and len(self.mined_ax > 2) and not (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000):
+                elif len(self.mined_tit) > 4 and len(self.mined_ax)>2 and not (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000):
                     '''if self.map[self.enemy_core_pos.y][self.enemy_core_pos.x][1] == 0:
                         self.status = ATTACK_ENEMY_SUPPLY_LINES
                     else:
