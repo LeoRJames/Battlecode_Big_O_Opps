@@ -22,6 +22,7 @@ DEFENCE = 7
 ATTACK_ENEMY_SUPPLY_LINES = 5
 FOUNDRY = 6
 MOVING_TURRET = 8
+ATTACK_ENEMY_CONVEYORS = 9
 
 class Player:
     def __init__(self):
@@ -74,6 +75,8 @@ class Player:
         self.prev_fire = [None, None]   # 0: position; 1: hp after firing
         self.enemy_supply = None
         self.bot_count = 0
+        self.possible_core_locations = []
+        self.circling_count = 0
 
     def initialise_map(self, ct):   # Set up 2d array for each tile on map each storing a list of three info pieces (tile type, building, team)
         self.team = ct.get_team()
@@ -659,6 +662,12 @@ class Player:
                     # Update known location of enemy core
                     elif marker_status == 2 or marker_status == 4:
                         self.enemy_core_pos = Position(target_x, target_y)
+                        if self.enemy_core_pos == Position(0, 0):
+                            self.enemy_core_pos = Position(1000, 1000)
+                            self.possible_core_locations = [
+                                                            [ct.get_map_width() - 1 - self.core_pos.x, self.core_pos.y],  # Horizontal Flip
+                                                            [self.core_pos.x, ct.get_map_height() - 1 - self.core_pos.y],  # Vertical Flip
+                                                            [ct.get_map_width() - 1 - self.core_pos.x, ct.get_map_height() - 1 - self.core_pos.y]]  # Rotation
                         print(marker_value, i)
                         print(marker_status, marker_value_id, target_x, target_y, self.id)
                         if marker_value_id == self.id:
@@ -670,6 +679,12 @@ class Player:
                             return
                     elif marker_status == 3:
                         self.enemy_core_pos = Position(target_x, target_y)
+                        if self.enemy_core_pos == Position(0, 0):
+                            self.enemy_core_pos = Position(1000, 1000)
+                            self.possible_core_locations = [
+                                                            [ct.get_map_width() - 1 - self.core_pos.x, self.core_pos.y],  # Horizontal Flip
+                                                            [self.core_pos.x, ct.get_map_height() - 1 - self.core_pos.y],  # Vertical Flip
+                                                            [ct.get_map_width() - 1 - self.core_pos.x, ct.get_map_height() - 1 - self.core_pos.y]]  # Rotation
                         if marker_value_id == self.id:
                             self.target = self.enemy_core_pos
                             self.status = ATTACK_ENEMY_SUPPLY_LINES
@@ -693,8 +708,8 @@ class Player:
     def explore(self, ct, target=None):
         if self.invalid_tiles:
             print("Finding Invalid Tiles")
-            self.find_invalid_tiles(ct, target)
-            if self.built_harvester[1] != None:
+            res = self.find_invalid_tiles(ct, target)
+            if self.built_harvester[1] != None and res:
                 ct.draw_indicator_dot(self.built_harvester[1], 0, 0, 255)
                 if len(self.map[self.built_harvester[1].y][self.built_harvester[1].x][3]) > 1:
                     self.built_harvester[1] = self.map[self.built_harvester[1].y][self.built_harvester[1].x][3][1]
@@ -1213,6 +1228,7 @@ class Player:
         wall_loop = self.smallest_wall_loop(Position(wall_tile_x, wall_tile_y))
         if wall_loop == None:
             print("No loop")
+            return False
         else:
             print(wall_loop)
             for tile in wall_loop:
@@ -1223,6 +1239,7 @@ class Player:
             for tile in inside_points:
                 ct.draw_indicator_dot(Position(tile[0], tile[1]), 0, 255, 0)
                 self.unreachable_tiles.append(Position(tile[0], tile[1]))
+            return True
 
     def find_enemy_core(self, ct):
         if len(self.tit) > 0 and self.mined_tit_count == 0:
@@ -1462,10 +1479,18 @@ class Player:
             self.explore(ct)
             return
         elif len(self.enemy_mined_tit) == 0:
-            self.enemy_mined_tit_target = None
-            self.explore_start = self.enemy_core_pos
-            self.exploring_the_map(ct, self.enemy_core_pos)
-            return
+            if len(self.attacked_enemy_mined_tit) > 0 and self.pos.distance_squared(self.enemy_core_pos) > 15**2:
+                self.status = MINING_TITANIUM
+                self.target = Position(1000, 1000)
+                return
+            self.circling_count += 1
+            if self.circling_count <= 50:
+                self.enemy_mined_tit_target = None
+                self.explore_start = self.enemy_core_pos
+                self.exploring_the_map(ct, self.enemy_core_pos)
+                return
+            else:
+                self.status = ATTACK_ENEMY_CONVEYORS
         elif self.enemy_mined_tit_target == None:   # Robust check
             if len(self.enemy_mined_tit) != 0:
                 self.target = self.enemy_mined_tit[0]
@@ -2761,7 +2786,7 @@ class Player:
                             ct.place_marker(i, message)
                             break
 
-            elif ((self.extra_spawned < 1 and ct.get_current_round() > 10 and len(self.map[0]) >= 25 and len(self.map) >= 25 and self.enemy_core_pos == Position(1000, 1000)) or (self.extra_spawned < 2 and ct.get_current_round() > 1000 and ct.get_global_resources()[0] > 1000)) and self.num_spawned >= 3 and ct.get_builder_bot_cost()[0] < ct.get_global_resources()[0]:
+            elif ((self.extra_spawned < 1 and ct.get_current_round() > 10 and len(self.map[0]) >= 15 and len(self.map) >= 15 and self.enemy_core_pos == Position(1000, 1000)) or (self.extra_spawned < 2 and ct.get_current_round() > 1000 and ct.get_global_resources()[0] > 1000)) and self.num_spawned >= 3 and ct.get_builder_bot_cost()[0] < ct.get_global_resources()[0]:
                 for spawn_pos in ct.get_nearby_tiles(8):
                     if ct.can_spawn(spawn_pos):
                         ct.spawn_builder(spawn_pos)
@@ -2793,7 +2818,7 @@ class Player:
                         break
 
             # Bots to attack supply lines
-            elif self.enemy_core_pos != Position(1000, 1000) and ct.get_global_resources()[0] > 500 and (9 <= self.num_spawned < 13 or (20 <= self.num_spawned <= 30 and self.num_spawned % 2 == 0 and ct.get_global_resources()[0] > 1500)):
+            elif ct.get_current_round() > 25 and ct.get_global_resources()[0] > 300 and (9 <= self.num_spawned < 13 or (20 <= self.num_spawned <= 30 and self.num_spawned % 2 == 0 and ct.get_global_resources()[0] > 1500)):
                 if ct.get_global_resources()[0] < ct.get_builder_bot_cost()[0]:
                     print("Waiting for resources to spawn builder bot")
                     return
@@ -2803,11 +2828,18 @@ class Player:
                         # Place marker, so bot knows where to go
                         bot_id = ct.get_tile_builder_bot_id(spawn_pos)
                         marker_status = 3   # Defence bot
-                        message = (
-                                marker_status * (2**28)
-                                + bot_id * (2**12)
-                                + self.enemy_core_pos.x * (2 ** 6)
-                                + self.enemy_core_pos.y)
+                        if self.enemy_core_pos != Position(1000, 1000):
+                            message = (
+                                    marker_status * (2**28)
+                                    + bot_id * (2**12)
+                                    + self.enemy_core_pos.x * (2 ** 6)
+                                    + self.enemy_core_pos.y)
+                        else:
+                            message = (
+                                    marker_status * (2**28)
+                                    + bot_id * (2**12)
+                                    + 0 * (2 ** 6)
+                                    + 0)
 
                         self.num_spawned += 1
                         for i in ct.get_nearby_tiles(7):
@@ -2817,7 +2849,7 @@ class Player:
                         break
 
             # Extra bots to attack enemy core
-            elif self.enemy_core_pos != Position(1000, 1000) and ct.get_global_resources()[0] > 500 and (self.num_spawned < 13 or (self.num_spawned <= 20 and ct.get_global_resources()[0] > 1000) or (20 <= self.num_spawned <= 30 and self.num_spawned % 2 == 1 and ct.get_global_resources()[0] > 1500)):
+            elif ct.get_current_round() > 25 and ct.get_global_resources()[0] > 300 and (self.num_spawned < 13 or (self.num_spawned <= 20 and ct.get_global_resources()[0] > 1000) or (20 <= self.num_spawned <= 30 and self.num_spawned % 2 == 1 and ct.get_global_resources()[0] > 1500)):
                 if ct.get_global_resources()[0] < ct.get_builder_bot_cost()[0]:
                     print("Waiting for resources to spawn builder bot")
                     return
@@ -2830,11 +2862,18 @@ class Player:
                             marker_status = 2   # Defence bot
                         else:
                             marker_status = 4
-                        message = (
-                                marker_status * (2**28)
-                                + bot_id * (2**12)
-                                + self.enemy_core_pos.x * (2 ** 6)
-                                + self.enemy_core_pos.y)
+                        if self.enemy_core_pos != Position(1000, 1000):
+                            message = (
+                                    marker_status * (2**28)
+                                    + bot_id * (2**12)
+                                    + self.enemy_core_pos.x * (2 ** 6)
+                                    + self.enemy_core_pos.y)
+                        else:
+                            message = (
+                                    marker_status * (2**28)
+                                    + bot_id * (2**12)
+                                    + 0 * (2 ** 6)
+                                    + 0)
 
                         self.num_spawned += 1
                         for i in ct.get_nearby_tiles(7):
@@ -2878,14 +2917,14 @@ class Player:
 
             elif self.status == EXPLORING:
                 print(f"Just roaming 'bout... \n Tit: {self.tit} \n Ax: {self.ax}")
-                if (len(self.tit) != 0 and (ct.get_current_round() <= 50 or (len(self.mined_tit) < 12 or (ct.get_current_round() > 1000 and len(self.ax) == 0 and len(self.mined_ax) > 4)) or (len(self.mined_tit) < 12 and not (len(self.ax) != 0 and ((ct.get_global_resources()[0] > 750 and ct.get_global_resources()[1] == 0) or ct.get_current_round() >= 750))) or (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000))) or (len(self.ax) != 0 and ct.get_current_round() > 50 and len(self.mined_tit) > 0 and ((len(self.mined_ax) < 8 or ct.get_current_round() > 1000) or (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000))):
+                if (len(self.tit) != 0 and (ct.get_current_round() <= 50 or len(self.mined_tit) < 4 or (len(self.mined_tit) < 8 and ct.get_current_round() >= 250 and len(self.enemy_mined_tit) == 0) or (ct.get_current_round() > 1000 and len(self.ax) == 0 and len(self.mined_ax) > 4 and len(self.mined_tit) < 12) or (len(self.mined_tit) < 12 and not (len(self.ax) != 0 and ((ct.get_global_resources()[0] > 750 and ct.get_global_resources()[1] == 0) or ct.get_current_round() >= 750))) or (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000))) or (len(self.ax) != 0 and ct.get_current_round() > 50 and len(self.mined_tit) > 0 and (len(self.mined_ax) < 2 or ct.get_current_round() > 1000 or (len(self.mined_ax) < 4 and ct.get_current_round() >= 250) or (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000))):
                     self.target = Position(1000, 1000)
                     self.status = MINING_TITANIUM
-                elif len(self.enemy_mined_tit) != 0 and self.enemy_core_pos != Position(1000, 1000):
+                elif len(self.enemy_mined_tit) != 0:# and self.enemy_core_pos != Position(1000, 1000):
                     self.target = Position(1000, 1000)
                     self.status = ATTACK_ENEMY_SUPPLY_LINES
                     self.explore_start = None
-                elif (len(self.tit) == 0 and ct.get_global_resources()[0] < 500) or (len(self.ax) == 0 and ct.get_global_resources()[1] == 0) or (len(self.attacked_enemy_mined_tit) < 3):
+                elif (len(self.tit) == 0 and len(self.mined_tit) < 5) or (len(self.ax) == 0 and len(self.mined_ax) == 0 and ct.get_global_resources()[1] == 0) or (len(self.enemy_mined_tit) == 0 and len(self.attacked_enemy_mined_tit) < 3):
                     print("Search for more to do")
                     self.exploring_the_map(ct)
                 else:
@@ -2911,7 +2950,7 @@ class Player:
                             self.harvest_ore(ct, self.ore_target)
                     else:
                         self.ore_target = None
-                elif len(self.tit) != 0 and (ct.get_current_round() <= 50 or (len(self.mined_tit) < 4 or (ct.get_current_round() > 1000 and len(self.ax) == 0 and len(self.mined_ax) > 4 and len(self.mined_tit) < 12)) or (len(self.mined_tit) < 12 and not (len(self.ax) != 0 and ((ct.get_global_resources()[0] > 750 and ct.get_global_resources()[1] == 0) or ct.get_current_round() >= 750))) or (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000)):
+                elif len(self.tit) != 0 and (ct.get_current_round() <= 50 or len(self.mined_tit) < 4 or (len(self.mined_tit) < 8 and ct.get_current_round() >= 250 and len(self.enemy_mined_tit) == 0) or (ct.get_current_round() > 1000 and len(self.ax) == 0 and len(self.mined_ax) > 4 and len(self.mined_tit) < 12) or (len(self.mined_tit) < 12 and not (len(self.ax) != 0 and ((ct.get_global_resources()[0] > 750 and ct.get_global_resources()[1] == 0) or ct.get_current_round() >= 750))) or (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000)):
                     closest_tit = Position(1000, 1000)
                     for i in range(len(self.tit)):
                         if self.tit[i].distance_squared(self.core_pos) < closest_tit.distance_squared(self.core_pos):
@@ -2919,7 +2958,7 @@ class Player:
                     self.harvest_ore(ct, closest_tit)
                     self.ore_target = closest_tit
                     ct.draw_indicator_line(self.pos, closest_tit, 0, 255, 0)
-                elif len(self.ax) != 0 and ct.get_current_round() > 50 and len(self.mined_tit) > 0 and ((len(self.mined_ax) < 2 or ct.get_current_round() > 1000) or (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000)):
+                elif len(self.ax) != 0 and ct.get_current_round() > 50 and len(self.mined_tit) > 0 and (len(self.mined_ax) < 2 or ct.get_current_round() > 1000 or (len(self.mined_ax) < 4 and ct.get_current_round() >= 250) or (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000)):
                     closest_ax = Position(1000, 1000)
                     for j in range(len(self.ax)):
                         if self.ax[j].distance_squared(self.core_pos) < closest_ax.distance_squared(self.core_pos):
@@ -2927,7 +2966,8 @@ class Player:
                     self.harvest_ore(ct, closest_ax)
                     self.ore_target = closest_ax
                     ct.draw_indicator_line(self.pos, closest_ax, 0, 255, 0)
-                elif self.enemy_core_pos != Position(1000, 1000) and not (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000):
+                #self.enemy_core_pos != Position(1000, 1000) and 
+                elif len(self.mined_tit) > 4 and len(self.mined_ax > 2) and not (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000):
                     '''if self.map[self.enemy_core_pos.y][self.enemy_core_pos.x][1] == 0:
                         self.status = ATTACK_ENEMY_SUPPLY_LINES
                     else:
@@ -2945,16 +2985,57 @@ class Player:
 
             elif self.status == ATTACK_ENEMY_CORE:
                 print("Attacking Enemy Core")
-                if self.enemy_core_pos.distance_squared(self.pos) > 50:
-                    self.target = self.enemy_core_pos
-                    self.explore(ct)
-                    return
-                self.attack_enemy_core(ct)
+                if self.enemy_core_pos == Position(1000, 1000):
+                    if len(self.possible_core_locations) != 0:
+                        self.target = Position(1000, 1000)
+                        for loc in self.possible_core_locations:
+                            loc_pos = Position(loc[0], loc[1])
+                            if self.pos.distance_squared(loc_pos) < self.pos.distance_squared(self.target):
+                                self.target = loc_pos
+                        if self.target == Position(1000, 1000):
+                            print("NOOOO", self.possible_core_locations)
+                            return
+                        if self.pos.distance_squared(self.target) > 13:
+                            self.explore(ct)
+                        else:
+                            self.possible_core_locations.remove([self.target.x, self.target.y])
+                    else:
+                        self.possible_core_locations = [
+                                                        [ct.get_map_width() - 1 - self.core_pos.x, self.core_pos.y],  # Horizontal Flip
+                                                        [self.core_pos.x, ct.get_map_height() - 1 - self.core_pos.y],  # Vertical Flip
+                                                        [ct.get_map_width() - 1 - self.core_pos.x, ct.get_map_height() - 1 - self.core_pos.y]]  # Rotation
+                else:
+                    if self.enemy_core_pos.distance_squared(self.pos) > 50:
+                        self.target = self.enemy_core_pos
+                        self.explore(ct)
+                        return
+                    self.attack_enemy_core(ct)
 
             elif self.status == ATTACK_ENEMY_SUPPLY_LINES:
-                print("Attack enemy supply lines")
-                print(self.target)
-                self.attack_enemy_supply_lines_V2(ct)
+                if self.enemy_core_pos == Position(1000, 1000):
+                    print("Finding core", self.possible_core_locations)
+                    if len(self.possible_core_locations) != 0:
+                        self.target = Position(1000, 1000)
+                        for loc in self.possible_core_locations:
+                            loc_pos = Position(loc[0], loc[1])
+                            if self.pos.distance_squared(loc_pos) < self.pos.distance_squared(self.target):
+                                self.target = loc_pos
+                        if self.target == Position(1000, 1000):
+                            print("NOOOO", self.possible_core_locations)
+                            return
+                        if self.pos.distance_squared(self.target) > 13:
+                            self.explore(ct)
+                        else:
+                            self.possible_core_locations.remove([self.target.x, self.target.y])
+                    else:
+                        self.possible_core_locations = [
+                                                        [ct.get_map_width() - 1 - self.core_pos.x, self.core_pos.y],  # Horizontal Flip
+                                                        [self.core_pos.x, ct.get_map_height() - 1 - self.core_pos.y],  # Vertical Flip
+                                                        [ct.get_map_width() - 1 - self.core_pos.x, ct.get_map_height() - 1 - self.core_pos.y]]  # Rotation
+                else:
+                    print("Attack enemy supply lines")
+                    print(self.target)
+                    self.attack_enemy_supply_lines_V2(ct)
 
             elif self.status == MOVING_TURRET:
                 print("Moving turret")
@@ -2964,6 +3045,10 @@ class Player:
                 print("FOUNDRY")
                 print(self.target)
                 self.foundry(ct)
+
+            elif self.status == ATTACK_ENEMY_CONVEYORS:
+                print("ATTACK ENEMY CONVEYORS")
+                self.attack_enemy_conveyors(ct)
 
         elif etype == EntityType.GUNNER:
             if self.status == INIT:
