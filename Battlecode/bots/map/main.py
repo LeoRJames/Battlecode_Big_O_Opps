@@ -73,6 +73,7 @@ class Player:
         self.mined_tit_count = 0
         self.prev_fire = [None, None]   # 0: position; 1: hp after firing
         self.enemy_supply = None
+        self.bot_count = 0
 
     def initialise_map(self, ct):   # Set up 2d array for each tile on map each storing a list of three info pieces (tile type, building, team)
         self.team = ct.get_team()
@@ -756,8 +757,10 @@ class Player:
             can_build_harvester = False
             if self.built_harvester[1] != None and self.built_harvester[1].distance_squared(ore) > 1:
                 self.built_harvester[1] = None
-            if self.map[ore.y][ore.x][4] != None and self.pos.distance_squared(ore) > 2:
-                pass
+            if self.map[ore.y][ore.x][4] != None and 0 < self.pos.distance_squared(ore) <= 2:
+                self.bot_count += 1
+            if self.bot_count == 5:
+                self.bot_count = 0
             elif ct.get_entity_type(ct.get_tile_building_id(ore)) == EntityType.MARKER and ct.get_team(ct.get_tile_building_id(ore)) == self.team:
                 marker_value = ct.get_marker_value(ct.get_tile_building_id(ore))
                 marker_value_id = (marker_value % (2 ** 28)) // (2 ** 12)
@@ -778,8 +781,8 @@ class Player:
             if not can_build_harvester:
                 print(f"Can not build Harvester at {ore}, removing from list.")
                 self.ore_target = None
-                #if self.map[ore.y][ore.x][4] == None or (self.map[ore.y][ore.x][4] != None and ct.get_team(ct.get_tile_builder_bot_id(ore)) != self.team):
                 self.unreachable_ores.append(ore)
+                self.bot_count = 0
                 if ore in self.tit:
                     self.tit.remove(ore)
                 elif ore in self.ax:
@@ -813,6 +816,7 @@ class Player:
                     else:
                         print("ore is not in tit or ax!")
                         #ct.resign()
+                self.bot_count = 0
                 return
             
             for d in STRAIGHTS:
@@ -821,7 +825,7 @@ class Player:
                     exists = True if 0 <= check_location.x < len(self.map[0]) and 0 <= check_location.y < len(self.map) else False
                     if exists:
                         is_not_wall = True if self.map[check_location.y][check_location.x][0] != Environment.WALL else False
-                        if is_not_wall and ((self.map[check_location.y][check_location.x][1] in [None, EntityType.ROAD] and self.map[check_location.y][check_location.x][2] in [None, self.team]) or self.map[check_location.y][check_location.x][1] == EntityType.MARKER):
+                        if is_not_wall and self.map[check_location.y][check_location.x][4] == None and ((self.map[check_location.y][check_location.x][1] in [None, EntityType.ROAD] and self.map[check_location.y][check_location.x][2] in [None, self.team]) or self.map[check_location.y][check_location.x][1] == EntityType.MARKER):
                             self.target = check_location
 
             if ct.get_global_resources()[0] < ct.get_harvester_cost()[0] and ct.can_place_marker(ore) and not (self.map[ore.y][ore.x][1] == EntityType.MARKER and self.map[ore.y][ore.x][2] == self.team):
@@ -869,6 +873,7 @@ class Player:
                     ct.destroy(ore)
                 if ct.can_build_harvester(ore):
                     ct.build_harvester(ore)
+                    self.bot_count = 0
                     self.built_harvester[0] = True
                     self.built_harvester[2] = ore
 
