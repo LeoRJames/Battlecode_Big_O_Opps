@@ -136,9 +136,9 @@ class Player:
                             self.target = tile
 
 
-                if self.map[tile.y][tile.x][0] == Environment.ORE_TITANIUM and tile not in self.tit and tile not in self.unreachable_ores and not(entity == EntityType.HARVESTER or (team != my_team and entity not in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.ROAD]) or (team == my_team and entity in [EntityType.BARRIER, EntityType.SENTINEL, EntityType.GUNNER, EntityType.LAUNCHER, EntityType.FOUNDRY, EntityType.BREACH])):
+                if self.map[tile.y][tile.x][0] == Environment.ORE_TITANIUM and tile not in self.tit and tile not in self.unreachable_ores and not(entity == EntityType.HARVESTER or (team != my_team and entity not in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.ROAD]) or (team == my_team and entity in [EntityType.SENTINEL, EntityType.GUNNER, EntityType.LAUNCHER, EntityType.FOUNDRY, EntityType.BREACH])):
                     self.tit.append(tile)
-                elif self.map[tile.y][tile.x][0] == Environment.ORE_AXIONITE and tile not in self.ax and tile not in self.unreachable_ores and not(entity == EntityType.HARVESTER or (team != my_team and entity not in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.ROAD]) or (team == my_team and entity in [EntityType.BARRIER, EntityType.SENTINEL, EntityType.GUNNER, EntityType.LAUNCHER, EntityType.FOUNDRY, EntityType.BREACH])):
+                elif self.map[tile.y][tile.x][0] == Environment.ORE_AXIONITE and tile not in self.ax and tile not in self.unreachable_ores and not(entity == EntityType.HARVESTER or (team != my_team and entity not in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.ROAD]) or (team == my_team and entity in [EntityType.SENTINEL, EntityType.GUNNER, EntityType.LAUNCHER, EntityType.FOUNDRY, EntityType.BREACH])):
                     self.ax.append(tile)
 
                 if entity == EntityType.HARVESTER:
@@ -153,11 +153,11 @@ class Player:
                         elif tile not in self.enemy_mined_ax and env == Environment.ORE_AXIONITE:   # and tile not in self.attacked_enemy_mined_ax
                             self.enemy_mined_ax.append(tile)
 
-                if tile in self.tit and (entity == EntityType.HARVESTER or (team != my_team and entity not in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.ROAD]) or (team == my_team and entity in [EntityType.BARRIER, EntityType.SENTINEL, EntityType.GUNNER, EntityType.LAUNCHER, EntityType.FOUNDRY, EntityType.BREACH])): #  and (self.status != 2 or not self.built_harvester[0]):  # Remove from list if another bot has built harveter on it
+                if tile in self.tit and (entity == EntityType.HARVESTER or (team != my_team and entity not in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.ROAD]) or (team == my_team and entity in [EntityType.SENTINEL, EntityType.GUNNER, EntityType.LAUNCHER, EntityType.FOUNDRY, EntityType.BREACH])): #  and (self.status != 2 or not self.built_harvester[0]):  # Remove from list if another bot has built harveter on it
                     self.tit.remove(tile)
                     if tile == self.ore_target:
                         self.ore_target = None
-                elif tile in self.ax and (entity == EntityType.HARVESTER or (team != my_team and entity not in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.ROAD]) or (team == my_team and entity in [EntityType.BARRIER, EntityType.SENTINEL, EntityType.GUNNER, EntityType.LAUNCHER, EntityType.FOUNDRY, EntityType.BREACH])): # and (self.status != 2 or not self.built_harvester[0]):
+                elif tile in self.ax and (entity == EntityType.HARVESTER or (team != my_team and entity not in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.ROAD]) or (team == my_team and entity in [EntityType.SENTINEL, EntityType.GUNNER, EntityType.LAUNCHER, EntityType.FOUNDRY, EntityType.BREACH])): # and (self.status != 2 or not self.built_harvester[0]):
                     self.ax.remove(tile)
                     if tile == self.ore_target:
                         self.ore_target = None
@@ -762,7 +762,7 @@ class Player:
                 if marker_value_id == ct.get_id():
                     print(f"Secured harvester target : {ore}")
                     can_build_harvester = True
-            elif self.map[ore.y][ore.x][1] in [EntityType.ROAD, None] and self.map[ore.y][ore.x][2] in [self.team, None] :
+            elif self.map[ore.y][ore.x][1] in [EntityType.ROAD, EntityType.BARRIER, None] and self.map[ore.y][ore.x][2] in [self.team, None] :
                 for d in STRAIGHTS:
                     check_location = ore.add(d)
                     exists = True if 0 <= check_location.x < len(self.map[0]) and 0 <= check_location.y < len(self.map) else False
@@ -797,7 +797,7 @@ class Player:
                 self.explore(ct)
                 self.target = Position(1000, 1000)
             
-            if ore.distance_squared(self.pos) <= 2 and ore.distance_squared(self.core_pos) > 25**2:     # No point in connecting ores so far away as will cost a lot and probably go through an already clogged up route
+            if ore.distance_squared(self.pos) <= 2 and ore.distance_squared(self.core_pos) > 30**2:     # No point in connecting ores so far away as will cost a lot and probably go through an already clogged up route
                 print(f"Ore is too far away")
                 if ct.can_destroy(ore) and self.map[ore.y][ore.x][1] not in [EntityType.HARVESTER, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.SPLITTER, EntityType.FOUNDRY]:
                     ct.destroy(ore)
@@ -2692,7 +2692,7 @@ class Player:
                             self.harvest_ore(ct, self.ore_target)
                     else:
                         self.ore_target = None
-                elif len(self.tit) != 0 and (ct.get_current_round() <= 50 or (len(self.mined_tit) < 12 or (ct.get_current_round() > 1000 and len(self.ax) == 0 and len(self.mined_ax) > 4)) or (len(self.mined_tit) < 12 and not (len(self.ax) != 0 and ((ct.get_global_resources()[0] > 750 and ct.get_global_resources()[1] == 0) or ct.get_current_round() >= 750))) or (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000)):
+                elif len(self.tit) != 0 and (ct.get_current_round() <= 50 or (len(self.mined_tit) < 8 or (ct.get_current_round() > 1000 and len(self.ax) == 0 and len(self.mined_ax) > 4 and len(self.mined_tit) < 12)) or (len(self.mined_tit) < 12 and not (len(self.ax) != 0 and ((ct.get_global_resources()[0] > 750 and ct.get_global_resources()[1] == 0) or ct.get_current_round() >= 750))) or (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000)):
                     closest_tit = Position(1000, 1000)
                     for i in range(len(self.tit)):
                         if self.tit[i].distance_squared(self.core_pos) < closest_tit.distance_squared(self.core_pos):
@@ -2700,7 +2700,7 @@ class Player:
                     self.harvest_ore(ct, closest_tit)
                     self.ore_target = closest_tit
                     ct.draw_indicator_line(self.pos, closest_tit, 0, 255, 0)
-                elif len(self.ax) != 0 and ct.get_current_round() > 50 and len(self.mined_tit) > 0 and ((len(self.mined_ax) < 8 or ct.get_current_round() > 1000) or (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000)):
+                elif len(self.ax) != 0 and ct.get_current_round() > 50 and len(self.mined_tit) > 0 and ((len(self.mined_ax) < 4 or ct.get_current_round() > 1000) or (ct.get_current_round() >= 1000 and ct.get_global_resources()[0] >= 1000)):
                     closest_ax = Position(1000, 1000)
                     for j in range(len(self.ax)):
                         if self.ax[j].distance_squared(self.core_pos) < closest_ax.distance_squared(self.core_pos):
