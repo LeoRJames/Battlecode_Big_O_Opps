@@ -2678,6 +2678,29 @@ class Player:
                     self.target = i
                     self.survey_mode = reconnect_conveyors
 
+            # Check if there are unmined ores nearby
+            elif i_building in [None, EntityType.ROAD, EntityType.MARKER] and self.map[i.y][i.x][0] in [Environment.ORE_TITANIUM, Environment.ORE_AXIONITE]  and self.survey_mode >= reconnect_conveyors:
+                reject = False
+                for s in STRAIGHTS:
+                    if self.is_on_map(i.add(s)) and (self.map[i.add(s).y][i.add(s).x][1] in [EntityType.GUNNER, EntityType.SENTINEL, EntityType.BREACH]) and self.map[i.add(s).y][i.add(s).x][2] != self.team:
+                        reject = True
+                if i not in self.unreachable_tiles and not reject:
+                    if self.pos.distance_squared(i) < self.target.distance_squared(self.pos) or self.target == self.core_pos:
+                        self.target = i
+                        self.survey_mode = reconnect_conveyors
+
+            # Check for unconnected harvesters
+            elif i_building in [EntityType.HARVESTER] and self.map[i.y][i.x][0] in [Environment.ORE_TITANIUM, Environment.ORE_AXIONITE]  and self.survey_mode >= reconnect_conveyors:
+                reject = False
+                for s in STRAIGHTS:
+                    if self.is_on_map(i.add(s)) and (self.map[i.add(s).y][i.add(s).x][1] in [EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR]):
+                        reject = True
+                if i not in self.unreachable_tiles and not reject:
+                    if self.pos.distance_squared(i) < self.target.distance_squared(self.pos) or self.target == self.core_pos:
+                        self.target = i
+                        self.survey_mode = reconnect_conveyors
+
+
         if self.pos.distance_squared(self.target) >= 4 and self.survey_mode != 10: # and self.defence_mode >= 3:
             print(f"Survey mode: {self.survey_mode}, target: ({self.target.x}, {self.target.y})")
             self.explore(ct)
@@ -2794,9 +2817,45 @@ class Player:
         elif self.survey_mode == reconnect_conveyors:
             print(f"Survey_mode 5: Connecting ({self.target.x}, {self.target.y})")
             self.survey_mode = 10
-            if self.pos != self.target:
+
+            if self.map[self.target.y][self.target.x][0] in [Environment.ORE_AXIONITE, Environment.ORE_TITANIUM]:
+                if self.map[self.target.y][self.target.x][1] == EntityType.HARVESTER:
+                    print("Harvester already built!")
+                    for s in STRAIGHTS:
+                        self_map = self.map[self.target.add(s).y][self.target.add(s).x]
+                        if self_map[0] != Environment.WALL and self_map[1] in [None, EntityType.ROAD]:
+                            print("YAY", s)
+                            self.built_harvester[0] = True
+                            self.built_harvester[2] = self.target
+                            self.target = self.target.add(s)
+                            if ct.can_move(self.pos.direction_to(self.target)):
+                                ct.move(self.pos.direction_to(self.target))
+                            self.bot_count = 0
+                            self.harvest_ore(ct, self.target)
+                            return
+
+                #if self.pos == self.target:
+                #    for d in DIRECTIONS:
+                #        if ct.can_move(d):
+                #            ct.move(d)
+                #self.status = MINING_TITANIUM
+                if self.map[self.target.y][self.target.x][1] in [None, EntityType.MARKER, EntityType.ROAD]:
+                    print(ct.get_harvester_cost())
+                    self.built_harvester[0] = False
+                    ore = self.target
+                    self.target = Position(1000,1000)
+                    self.harvest_ore(ct, ore)
+
+
+                if ct.can_fire(self.target) and self.map[self.target.y][self.target.x][2] != self.team:
+                    ct.fire(self.target)
+
+                return
+            print(self.map[self.target.y][self.target.x][0], self.map[self.target.y][self.target.x][1])
+            if self.pos != self.target and not (self.map[self.target.y][self.target.x][0] in [Environment.ORE_AXIONITE, Environment.ORE_TITANIUM] and self.map[self.target.y][self.target.x][1] in [None, EntityType.MARKER, EntityType.ROAD, EntityType.HARVESTER]) :
                 self.explore(ct,self.target)
                 return
+
             self.built_harvester[0] = True
             self.harvest_ore(ct, self.target)
             return
