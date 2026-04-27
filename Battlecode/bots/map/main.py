@@ -2244,12 +2244,14 @@ class Player:
                 building_targets = [i.add(i_direction), i.add(i_direction.rotate_left().rotate_left()), i.add(i_direction.rotate_right().rotate_right())]
                 if self.defence_mode > build_defences:
                     self.target = self.core_pos
+                    self.defence_mode = build_defences
 
             # Build gunners next to a foundry
             elif i_building in [EntityType.FOUNDRY] and self.defence_mode >= build_defences:
                 building_targets = [i.add(Direction.NORTH), i.add(Direction.WEST), i.add(Direction.EAST), i.add(Direction.SOUTH)]
                 if self.defence_mode > build_defences:
                     self.target = self.core_pos
+                    self.defence_mode = build_defences
 
             # Upgrade conveyors to armoured conveyors
             elif self.defence_mode >= upgrade_conveyors and i_building == EntityType.CONVEYOR and i_team == self.team:
@@ -2398,20 +2400,25 @@ class Player:
                             self.harvest_ore(ct, self.target)
                             return
 
+                #if self.pos == self.target:
+                #    for d in DIRECTIONS:
+                #        if ct.can_move(d):
+                #            ct.move(d)
                 #self.status = MINING_TITANIUM
-                if  self.map[self.target.y][self.target.x][1] in [None, EntityType.MARKER, EntityType.ROAD]:
-                    if ct.can_destroy(self.target):
-                        ct.destroy(self.target)
-                    print("harvester")
+                if self.map[self.target.y][self.target.x][1] in [None, EntityType.MARKER, EntityType.ROAD]:
+                    print(ct.get_harvester_cost())
                     self.built_harvester[0] = False
-                    self.harvest_ore(ct, self.target)
+                    ore = self.target
+                    self.target = Position(1000,1000)
+                    self.harvest_ore(ct, ore)
 
 
                 if ct.can_fire(self.target) and self.map[self.target.y][self.target.x][2] != self.team:
                     ct.fire(self.target)
 
                 return
-            if self.pos != self.target:
+            print(self.map[self.target.y][self.target.x][0], self.map[self.target.y][self.target.x][1])
+            if self.pos != self.target and not (self.map[self.target.y][self.target.x][0] in [Environment.ORE_AXIONITE, Environment.ORE_TITANIUM] and self.map[self.target.y][self.target.x][1] in [None, EntityType.MARKER, EntityType.ROAD, EntityType.HARVESTER]) :
                 self.explore(ct,self.target)
                 return
 
@@ -2449,17 +2456,16 @@ class Player:
             self.defence_mode = 10
 
         elif self.defence_mode == destroy_roads:
+            print(f"Defence_mode 7: Destroying Road ({self.target.x},{self.target.y})")
             if self.pos.distance_squared(self.target) > 2:
                 self.explore(ct)
             elif self.map[self.target.y][self.target.x][2] != self.team and self.pos != self.target:
                 self.explore(ct)
             if ct.can_destroy(self.target) and self.map[self.target.y][self.target.x][1] in [EntityType.ROAD, EntityType.BARRIER]:
                 ct.destroy(self.target)
-                self.defence_mode = 10
             elif ct.can_fire(self.target):
                 ct.fire(self.target)
-                if ct.get_tile_building_id(self.target) == None:
-                    self.defence_mode = 10
+            self.defence_mode = 10
 
         else:
             print("Nothing to do!", self.defence_mode)
