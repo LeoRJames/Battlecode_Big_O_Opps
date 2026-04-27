@@ -1547,7 +1547,9 @@ class Player:
                 self.exploring_the_map(ct, self.enemy_core_pos)
                 return
             else:
+                self.target = Position(1000, 1000)
                 self.status = ATTACK_ENEMY_CONVEYORS
+                return
         elif self.enemy_mined_tit_target == None:   # Robust check
             if len(self.enemy_mined_tit) != 0:
                 self.target = self.enemy_mined_tit[0]
@@ -1598,8 +1600,8 @@ class Player:
                 return
             elif len(target_tile_1) + len(target_tile_2) == 0:
                 self.enemy_supply = None
-                self.attack_enemy_conveyors(ct)
                 self.target == Position(1000, 1000)
+                self.attack_enemy_conveyors(ct)
                 return    # Attack enemy conveyors
             else:
                 for tile in target_tile_1:  # Prevents sentinel from pointing into harvester as it cannot receive supply
@@ -2743,7 +2745,7 @@ class Player:
                     round = ct.get_current_round()
                     message = (
                         marker_status * (2 ** 28)
-                        + bot_id * (2 ** 20)
+                        + bot_id * (2 ** 12)
                         + round)
                     ct.place_marker(target_tile, message)
 
@@ -2801,10 +2803,12 @@ class Player:
             else:
                 if self.pos.distance_squared(self.mined_tit[-1]) > 16:
                     self.target = self.mined_tit[-1]
+                    self.explore(ct)
                 elif self.pos.distance_squared(self.core_pos) > 16:
                     self.target = self.core_pos
+                    self.explore(ct)
                 else:
-                    self.status = EXPLORING
+                    self.exploring_the_map(ct)
                     self.target = Position(1000, 1000)
 
     def foundry(self, ct):
