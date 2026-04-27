@@ -401,11 +401,12 @@ class Player:
 
                 if tile[0] == 0 or ((nx, ny) == target) or (target == (self.enemy_core_pos.x, self.enemy_core_pos.y) and tile[1] == EntityType.CORE) or ((    # current == target and (self.target.x, self.target.y) == target
                     not (tile[4] in [EntityType.BUILDER_BOT]
-                        and ct_pos.distance_squared(Position(cx, cy)) <= 2)
+                        and ct_pos.distance_squared(Position(cx, cy)) <= 8)
                 ) and (
                     tile[1] in [EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE,
                                 EntityType.CONVEYOR, EntityType.MARKER,
                                 EntityType.ROAD, EntityType.SPLITTER]
+                    or (tile[1] == EntityType.BARRIER and tile[2] == team)
                     or (tile[1] == EntityType.CORE and (tile[2] == team or (tile[2] != team and self.status == ATTACK_ENEMY_CORE and target[0] != 1000 and grid[target[1]][target[0]][1] == EntityType.CORE)))
                     or (tile[1] is None and tile[0] != Environment.WALL)
                 )):
@@ -433,12 +434,12 @@ class Player:
 
                 if not (
                     tile[4] in [EntityType.BUILDER_BOT]
-                    and ct_pos.distance_squared(Position(cx, cy)) <= 2
+                    and ct_pos.distance_squared(Position(cx, cy)) <= 8
                 ) and (
                     tile[1] in [EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE,
                                 EntityType.CONVEYOR, EntityType.MARKER,
                                 EntityType.ROAD, EntityType.SPLITTER]
-                    or (tile[1] == EntityType.CORE and tile[2] == team)
+                    or (tile[1] in [EntityType.CORE, EntityType.BARRIER] and tile[2] == team)
                     or (tile[1] is None and tile[0] != Environment.WALL)
                 ):
                     results.append((nx, ny))
@@ -711,6 +712,11 @@ class Player:
                 print(path_explore[i])
                 ct.draw_indicator_dot(path_explore[i], 0, 255, 255)
             if len(path_explore) > 1:    # If next to target but cannot move there as there is a builder bot this condition is not satisfied so will just wait
+                if self.map[path_explore[1].y][path_explore[1].x][1] == EntityType.BARRIER:
+                    if ct.can_destroy(path_explore[1]):
+                        ct.destroy(path_explore[1])
+                    else:
+                        print("Cannot destroy barrier")
                 if ct.can_build_road(path_explore[1]):  # Fails if trying to build on to core
                     ct.build_road(path_explore[1])
                 if ct.can_move(self.pos.direction_to(path_explore[1])):
@@ -744,21 +750,13 @@ class Player:
                 self.target = Position(1000, 1000)
                 return
 
-            # Happens to be on top of ore, move
-            if self.map[self.pos.y][self.pos.x][2] == self.team and self.pos == ore:
-                print(f"Moving from on top of ore")
-                for d in DIRECTIONS:
-                    if ct.can_build_road(self.pos.add(d)):
-                        ct.build_road(self.pos.add(d))
-                    if ct.can_move(d):
-                        ct.move(d)
-                        break
-
             # Checks if another bot has claimed the ore or there is a possible place to put conveyor next to harvester
             can_build_harvester = False
             if self.built_harvester[1] != None and self.built_harvester[1].distance_squared(ore) > 1:
                 self.built_harvester[1] = None
-            if ct.get_entity_type(ct.get_tile_building_id(ore)) == EntityType.MARKER and ct.get_team(ct.get_tile_building_id(ore)) == self.team:
+            if self.map[ore.y][ore.x][4] != None and self.pos.distance_squared(ore) > 2:
+                pass
+            elif ct.get_entity_type(ct.get_tile_building_id(ore)) == EntityType.MARKER and ct.get_team(ct.get_tile_building_id(ore)) == self.team:
                 marker_value = ct.get_marker_value(ct.get_tile_building_id(ore))
                 marker_value_id = (marker_value % (2 ** 28)) // (2 ** 12)
                 if marker_value_id == ct.get_id():
@@ -778,7 +776,8 @@ class Player:
             if not can_build_harvester:
                 print(f"Can not build Harvester at {ore}, removing from list.")
                 self.ore_target = None
-                self.unreachable_ores.append(ore)
+                if self.map[ore.y][ore.x][4] == None:
+                    self.unreachable_ores.append(ore)
                 if ore in self.tit:
                     self.tit.remove(ore)
                 elif ore in self.ax:
@@ -837,12 +836,17 @@ class Player:
                 return
             
             elif self.target != Position(1000, 1000):   # Must add firing
-                if self.pos == self.target:
+                if self.pos != ore:
+                    temp = self.target
+                    self.target = ore
+                    self.explore(ct)
+                    self.target = temp
+                '''if self.pos == self.target:
                     for d in DIRECTIONS:
                         if ct.can_build_road(self.pos.add(d)):
                             ct.build_road(self.pos.add(d))
                         if ct.can_move(d):
-                            ct.move(d)
+                            ct.move(d)'''
                 if ct.can_destroy(self.target) and self.map[self.target.y][self.target.x][1] in [EntityType.ROAD] and self.map[self.target.y][self.target.x][2] == self.team:
                     ct.destroy(self.target)
                 if ct.can_build_barrier(self.target):
@@ -850,6 +854,15 @@ class Player:
                     self.target = Position(1000, 1000)
 
             elif ct.get_global_resources()[0] >= ct.get_harvester_cost()[0]:
+                # Happens to be on top of ore, move
+                if self.map[self.pos.y][self.pos.x][2] == self.team and self.pos == ore:
+                    print(f"Moving from on top of ore")
+                    for d in DIRECTIONS:
+                        if ct.can_build_road(self.pos.add(d)):
+                            ct.build_road(self.pos.add(d))
+                        if ct.can_move(d):
+                            ct.move(d)
+                            break
                 if ct.can_destroy(ore) and self.map[ore.y][ore.x][1] not in [EntityType.HARVESTER, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.SPLITTER, EntityType.FOUNDRY]:
                     ct.destroy(ore)
                 if ct.can_build_harvester(ore):
@@ -2487,6 +2500,8 @@ class Player:
         etype = ct.get_entity_type()
 
         if etype == EntityType.CORE:
+            #if ct.get_current_round() > 300:
+            #    ct.resign()
 
             if self.team == None:
                 self.team = ct.get_team()
@@ -2743,6 +2758,16 @@ class Player:
 
         elif etype == EntityType.SENTINEL:
             self.update_map(ct)
+            if self.pos == None:
+                self.pos = ct.get_position()
+            if self.team == None:
+                self.team = ct.get_team()
+            if self.core_pos == Position(1000, 1000):
+                for id in ct.get_nearby_buildings():
+                    if ct.get_entity_type(id) == EntityType.CORE and ct.get_team(id) == self.team:
+                        self.core_pos = Position(2000, 2000)
+                if self.core_pos != Position(2000, 2000):
+                    self.core_pos = Position(3000, 3000)
             target = None
             for tile in ct.get_attackable_tiles():
                 xx = tile.x
@@ -2763,3 +2788,6 @@ class Player:
             if target != None:
                 if ct.can_fire(target):
                     ct.fire(target)
+            else:
+                if self.core_pos == Position(3000, 3000):
+                    ct.self_destruct()
