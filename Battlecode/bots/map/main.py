@@ -1020,12 +1020,17 @@ class Player:
                                 return'''
 
                 if ct.can_build_conveyor(path[0], conveyor_dir):
-                    ct.build_conveyor(path[0], conveyor_dir)
-                    move_dir = self.pos.direction_to(path[0])
-                    if ct.can_move(move_dir):
-                        ct.move(move_dir)
+                    if self.map[path[1].y][path[1].x][1] == EntityType.SPLITTER and self.map[path[1].y][path[1].x][3][0] != conveyor_dir:
+                        if ct.can_build_bridge(path[0], path[1]):
+                            ct.build_bridge(path[0], path[1])
+                            self.built_harvester[1] = path[1]
                     else:
-                        self.built_harvester[1] = path[0]
+                        ct.build_conveyor(path[0], conveyor_dir)
+                        move_dir = self.pos.direction_to(path[0])
+                        if ct.can_move(move_dir):
+                            ct.move(move_dir)
+                        else:
+                            self.built_harvester[1] = path[0]
                 elif self.map[path[0].y][path[0].x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE] and self.map[path[0].y][path[0].x][2] == self.team:
                     move_dir = self.pos.direction_to(path[0])
                     if ct.can_move(move_dir):
