@@ -718,6 +718,7 @@ class Player:
             self.defence_mode = 10
             if sum([ 1 if ct.get_entity_type(i) == EntityType.BUILDER_BOT else 0 for i in ct.get_nearby_entities(5)]) > 4 and ct.get_hp(ct.get_tile_building_id(self.core_pos)) == ct.get_max_hp(ct.get_tile_building_id(self.core_pos)):
                 self.status = EXPLORING
+                print("Exploring")
 
     def explore(self, ct, target=None):
         if self.invalid_tiles:
@@ -908,6 +909,14 @@ class Player:
 
         else:
             if self.built_harvester[1] is not None:
+                if self.map[self.built_harvester[1].y][self.built_harvester[1].x][1] == EntityType.CORE:
+                    print("Path Building Complete")
+                    self.mined_tit_count += 1
+                    self.built_harvester = [False, None, None]
+                    self.ore_target = None
+                    self.pathfinder_fail_count = 0
+                    self.try_avoid = True
+                    return
                 print(f"Going to {self.built_harvester[1]}")
                 if self.pos != self.built_harvester[1]:
                     self.target = self.built_harvester[1]
@@ -1005,8 +1014,9 @@ class Player:
                     ct.fire(path[0])
                 elif ct.can_destroy(path[0]) and not (self.map[path[0].y][path[0].x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE, EntityType.FOUNDRY, EntityType.HARVESTER] and self.map[path[0].y][path[0].x][2] == self.team):
                     ct.destroy(path[0])
-                if not (self.built_harvester[2] in self.mined_tit and len(self.mined_tit) > 12 and self.try_avoid) and len(path) >= 2 and self.map[path[1].y][path[1].x][1] == EntityType.CORE:
-                    splitter_dir = self.pos.direction_to(path[0])
+                print(path)
+                if self.map[path[1].y][path[1].x][1] == EntityType.CORE: # and not (self.built_harvester[2] in self.mined_tit and len(self.mined_tit) > 12 and self.try_avoid) and len(path) >= 2 and self.map[path[1].y][path[1].x][1] == EntityType.CORE:
+                    splitter_dir = self.pos.direction_to(path[0] if path[0] != self.pos else path[1])
                     if ct.can_build_splitter(path[0], splitter_dir):
                         ct.build_splitter(path[0], splitter_dir)
                         print("Path Building Complete")
@@ -1055,7 +1065,7 @@ class Player:
                                 print("Waiting for money to build splitter")
                                 return'''
 
-                if ct.can_build_conveyor(path[0], conveyor_dir):
+                elif ct.can_build_conveyor(path[0], conveyor_dir):
                     if self.map[path[1].y][path[1].x][1] == EntityType.SPLITTER and self.map[path[1].y][path[1].x][3][0] != conveyor_dir:
                         if ct.can_build_bridge(path[0], path[1]):
                             ct.build_bridge(path[0], path[1])
@@ -1075,7 +1085,7 @@ class Player:
                     print("Waiting for money to build conveyor")
                     return
 
-            if self.map[path[1].y][path[1].x][1] in [EntityType.CORE, EntityType.SPLITTER, EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR, EntityType.BRIDGE]:
+            if self.map[path[1].y][path[1].x][1] in [EntityType.SPLITTER, EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR, EntityType.BRIDGE]: # Include EntityType.CORE
                 print("Path Building Complete")
                 self.mined_tit_count += 1
                 self.built_harvester = [False, None, None]
@@ -2095,7 +2105,7 @@ class Player:
         destroy_turret = 2
         heal = 3
         reconnect_conveyors = 4
-        build_defences = 5 #5
+        build_defences = 5
         # Work in progress
         upgrade_conveyors = 6
         destroy_roads = 7
@@ -2196,16 +2206,38 @@ class Player:
 
             # Check if any tiles need healing
             elif i_building and ct.get_hp(i_id) < ct.get_max_hp(i_id) and i_team == self.team and i_building != EntityType.ROAD and self.defence_mode >= heal: # and (self.map[i.y][i.x][4] != EntityType.BUILDER_BOT or self.pos == i)
-                if i.distance_squared(self.pos) < self.target.distance_squared(self.pos) or self.defence_mode >= heal:
+                if i.distance_squared(self.core_pos) < self.target.distance_squared(self.core_pos) or self.defence_mode > heal:
                     self.target = i
                 self.defence_mode = heal
 
             # Check if conveyor route home needs rebuilding
             elif i_building in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR] and ct.is_in_vision(i) and self.map[i.add(i_direction).y][i.add(i_direction).x][1] not in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE, EntityType.SENTINEL, EntityType.GUNNER] and self.defence_mode >= reconnect_conveyors:
-                print(i)
                 if ct.get_tile_builder_bot_id(i) is None and not (ct.is_in_vision(i.add(i_direction)) and ct.get_tile_builder_bot_id(i.add(i_direction)) is not None) and ct.get_stored_resource(ct.get_tile_building_id(i)) is not None or self.pos == i:
-                    self.target = i
-                    self.defence_mode = reconnect_conveyors
+                    if self.pos.distance_squared(i) < self.target.distance_squared(self.pos) or self.target == self.core_pos:
+                        self.target = i
+                        self.defence_mode = reconnect_conveyors
+
+            # Check if there are unmined ores nearby
+            elif i_building in [None, EntityType.ROAD, EntityType.MARKER] and self.map[i.y][i.x][0] in [Environment.ORE_TITANIUM, Environment.ORE_AXIONITE]  and self.defence_mode >= reconnect_conveyors:
+                reject = False
+                for s in STRAIGHTS:
+                    if self.is_on_map(i.add(s)) and (self.map[i.add(s).y][i.add(s).x][1] in [EntityType.GUNNER, EntityType.SENTINEL, EntityType.BREACH]) and self.map[i.add(s).y][i.add(s).x][2] != self.team:
+                        reject = True
+                if i not in self.unreachable_tiles and not reject:
+                    if self.pos.distance_squared(i) < self.target.distance_squared(self.pos) or self.target == self.core_pos:
+                        self.target = i
+                        self.defence_mode = reconnect_conveyors
+
+            # Check for unconnected harvesters
+            elif i_building in [EntityType.HARVESTER] and self.map[i.y][i.x][0] in [Environment.ORE_TITANIUM, Environment.ORE_AXIONITE]  and self.defence_mode >= reconnect_conveyors:
+                reject = False
+                for s in STRAIGHTS:
+                    if self.is_on_map(i.add(s)) and (self.map[i.add(s).y][i.add(s).x][1] in [EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR]):
+                        reject = True
+                if i not in self.unreachable_tiles and not reject:
+                    if self.pos.distance_squared(i) < self.target.distance_squared(self.pos) or self.target == self.core_pos:
+                        self.target = i
+                        self.defence_mode = reconnect_conveyors
 
             # Build gunners next to a splitter
             elif i_building == EntityType.SPLITTER and self.defence_mode >= build_defences:
@@ -2239,6 +2271,12 @@ class Player:
                             self.defence_mode = build_defences
                             print(self.target)
 
+        if self.core_pos.distance_squared(self.target) >= 45: # and self.pos.distance_squared(self.core_pos) > 49: # and self.defence_mode >= 3:
+            print(f"Strayed too far from core. Returning home.")
+            self.target = self.core_pos
+            self.explore(ct)
+            self.defence_mode = 10
+            return
 
         if self.pos.distance_squared(self.target) >= 4 and self.defence_mode != 10: # and self.defence_mode >= 3:
             print(f"Defence mode: {self.defence_mode}, target: ({self.target.x}, {self.target.y})")
@@ -2319,14 +2357,64 @@ class Player:
             if ct.can_heal(self.target):
                 print("Healing")
                 ct.heal(self.target)
+            # Bot needs to move around!
             self.defence_mode = 10
+            if self.pos.distance_squared(self.core_pos) > 3:
+                self.target = self.core_pos
+                self.explore(ct)
+            else:
+                if self.pos == self.core_pos:
+                    if ct.can_move(Direction.NORTH):
+                        ct.move(Direction.NORTH)
+                else:
+                    dire = self.pos.direction_to(self.core_pos)
+                    if dire in DIAGONALS:
+                        if ct.can_move(dire.rotate_left()):
+                            ct.move(dire.rotate_left())
+                    elif dire in STRAIGHTS:
+                        if ct.can_move(dire.rotate_left().rotate_left()):
+                            ct.move(dire.rotate_left().rotate_left())
+                    else:
+                        print(dire)
+                return
 
         elif self.defence_mode == reconnect_conveyors:
             print(f"Defence_mode 4: Connecting ({self.target.x}, {self.target.y})")
             self.defence_mode = 10
+
+            if self.map[self.target.y][self.target.x][0] in [Environment.ORE_AXIONITE, Environment.ORE_TITANIUM]:
+                if self.map[self.target.y][self.target.x][1] == EntityType.HARVESTER:
+                    print("Harvester already built!")
+                    for s in STRAIGHTS:
+                        self_map = self.map[self.target.add(s).y][self.target.add(s).x]
+                        if self_map[0] != Environment.WALL and self_map[1] in [None, EntityType.ROAD]:
+                            print("YAY", s)
+                            self.built_harvester[0] = True
+                            self.built_harvester[2] = self.target
+                            self.target = self.target.add(s)
+                            if ct.can_move(self.pos.direction_to(self.target)):
+                                ct.move(self.pos.direction_to(self.target))
+                            self.bot_count = 0
+                            self.harvest_ore(ct, self.target)
+                            return
+
+                #self.status = MINING_TITANIUM
+                if  self.map[self.target.y][self.target.x][1] in [None, EntityType.MARKER, EntityType.ROAD]:
+                    if ct.can_destroy(self.target):
+                        ct.destroy(self.target)
+                    print("harvester")
+                    self.built_harvester[0] = False
+                    self.harvest_ore(ct, self.target)
+
+
+                if ct.can_fire(self.target) and self.map[self.target.y][self.target.x][2] != self.team:
+                    ct.fire(self.target)
+
+                return
             if self.pos != self.target:
                 self.explore(ct,self.target)
                 return
+
             self.built_harvester[0] = True
             self.harvest_ore(ct, self.target)
             return
@@ -2372,10 +2460,12 @@ class Player:
                 ct.fire(self.target)
                 if ct.get_tile_building_id(self.target) == None:
                     self.defence_mode = 10
+
         else:
+            print("Nothing to do!", self.defence_mode)
             if ct.get_hp() < ct.get_max_hp() and ct.can_heal(self.pos):
                 ct.heal(self.pos)
-            if self.pos.distance_squared(self.core_pos) > 2:
+            if self.pos.distance_squared(self.core_pos) > 3:
                 self.target = self.core_pos
                 self.explore(ct)
             else:
@@ -2393,8 +2483,6 @@ class Player:
                     else:
                         print(dire)
                 return
-            # Add some feature to roam about (leo's new thingy)
-            print("Nothing to do!", self.defence_mode)
             # Very basic explore algorithm
         '''
         # Destroy roads around the core (to give space for markers) - dubious - may use up titanium
@@ -2639,7 +2727,6 @@ class Player:
             if rem > 0:
                 radii = radii2 + 1
         return radii
-        
 
     def find_corners(self, centre, radii=None):
         if radii == None:
