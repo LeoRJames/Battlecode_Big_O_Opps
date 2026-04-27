@@ -2621,9 +2621,10 @@ class Player:
                 if self.survey_mode < destroy_turret:
                     break
 
-                elif self.bot_target != None:
+                elif self.bot_target != None and self.bot_target in ct.get_nearby_entities() and self.pos.distance_squared(ct.get_position(self.bot_target)) > 8:
                     self.survey_mode = follow_bot
                     continue
+
                 elif not (self.survey_mode < destroy_turret):
 
                     for j in DIRECTIONS:
