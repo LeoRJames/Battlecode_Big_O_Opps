@@ -2714,7 +2714,7 @@ class Player:
                         self.survey_mode = reconnect_conveyors
 
 
-        if self.pos.distance_squared(self.target) >= 4 and self.survey_mode != 10: # and self.defence_mode >= 3:
+        if self.pos.distance_squared(self.target) >= 4 and self.survey_mode != 10 and self.survey_mode != 3: # and self.defence_mode >= 3:
             print(f"Survey mode: {self.survey_mode}, target: ({self.target.x}, {self.target.y})")
             self.explore(ct)
             return
