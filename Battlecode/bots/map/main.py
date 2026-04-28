@@ -1665,7 +1665,7 @@ class Player:
                         self.target = Position(1000, 1000)
                     return
             elif ct.can_fire(self.target):
-                if self.prev_fire[0] == None or (self.prev_fire[0] == self.target and ct.get_hp(ct.get_tile_building_id(self.target)) <= self.prev_fire[1]):
+                if self.prev_fire[0] == None or (self.prev_fire[0] != self.target) or (self.prev_fire[0] == self.target and ct.get_hp(ct.get_tile_building_id(self.target)) <= self.prev_fire[1]):
                     ct.fire(self.target)
                     if ct.get_tile_building_id(self.target) != None:
                         self.prev_fire[0] = self.target
@@ -1673,6 +1673,7 @@ class Player:
                     else:
                         self.prev_fire = [None, None]
                 else:
+                    print(self.prev_fire)
                     self.target = self.enemy_mined_tit_target
         elif 0 < self.pos.distance_squared(self.target) <= 20 and self.map[self.target.y][self.target.x][2] == self.team and self.map[self.target.y][self.target.x][1] in [EntityType.SENTINEL, EntityType.GUNNER, EntityType.BREACH]:
             self.enemy_mined_tit.remove(self.enemy_mined_tit_target)
@@ -1735,7 +1736,7 @@ class Player:
             return
         if self.map[self.target.y][self.target.x][1] in [EntityType.CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE] and self.map[self.target.y][self.target.x][2] != self.team:
             if ct.can_fire(self.target):
-                if self.prev_fire[0] == None or (self.prev_fire[0] == self.target and ct.get_hp(ct.get_tile_building_id(self.target)) <= self.prev_fire[1]):
+                if self.prev_fire[0] == None or (self.prev_fire[0] != self.target) or (self.prev_fire[0] == self.target and ct.get_hp(ct.get_tile_building_id(self.target)) <= self.prev_fire[1]):
                     ct.fire(self.target)
                     if ct.get_tile_building_id(self.target) != None:
                         self.prev_fire[0] = self.target
@@ -2684,14 +2685,14 @@ class Player:
                 continue
 
             # Check if conveyor route home needs rebuilding
-            elif i_building in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR] and ct.is_in_vision(i) and self.map[i.add(i_direction).y][i.add(i_direction).x][1] not in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE, EntityType.SENTINEL, EntityType.GUNNER] and self.survey_mode >= reconnect_conveyors:
+            elif ((i_team == self.team) or (i_team != self.team and i.distance_squared(self.core_pos) < ((len(self.map[0])/2)**2 + (len(self.map)/2)**2) )) and i_building in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR] and ct.is_in_vision(i) and self.map[i.add(i_direction).y][i.add(i_direction).x][1] not in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE, EntityType.SENTINEL, EntityType.GUNNER] and self.survey_mode >= reconnect_conveyors:
                 print(i)
                 if ct.get_tile_builder_bot_id(i) is None and not (ct.is_in_vision(i.add(i_direction)) and ct.get_tile_builder_bot_id(i.add(i_direction)) is not None) and ct.get_stored_resource(ct.get_tile_building_id(i)) is not None or self.pos == i:
                     self.target = i
                     self.survey_mode = reconnect_conveyors
 
             # Check if there are unmined ores nearby
-            elif i_building in [None, EntityType.ROAD, EntityType.MARKER] and self.map[i.y][i.x][0] in [Environment.ORE_TITANIUM, Environment.ORE_AXIONITE]  and self.survey_mode >= reconnect_conveyors:
+            elif i.distance_squared(self.core_pos) < ((len(self.map[0])/2)**2 + (len(self.map)/2)**2) and i_building in [None, EntityType.ROAD, EntityType.MARKER] and self.map[i.y][i.x][0] in [Environment.ORE_TITANIUM, Environment.ORE_AXIONITE]  and self.survey_mode >= reconnect_conveyors:
                 reject = False
                 for s in STRAIGHTS:
                     if self.is_on_map(i.add(s)) and (self.map[i.add(s).y][i.add(s).x][1] in [EntityType.GUNNER, EntityType.SENTINEL, EntityType.BREACH]) and self.map[i.add(s).y][i.add(s).x][2] != self.team:
@@ -2702,7 +2703,7 @@ class Player:
                         self.survey_mode = reconnect_conveyors
 
             # Check for unconnected harvesters
-            elif i_building in [EntityType.HARVESTER] and self.map[i.y][i.x][0] in [Environment.ORE_TITANIUM, Environment.ORE_AXIONITE]  and self.survey_mode >= reconnect_conveyors:
+            elif ((i_team == self.team) or (i_team != self.team and i.distance_squared(self.core_pos) < ((len(self.map[0])/2)**2 + (len(self.map)/2)**2) )) and i_building in [EntityType.HARVESTER] and self.map[i.y][i.x][0] in [Environment.ORE_TITANIUM, Environment.ORE_AXIONITE]  and self.survey_mode >= reconnect_conveyors:
                 reject = False
                 for s in STRAIGHTS:
                     if self.is_on_map(i.add(s)) and (self.map[i.add(s).y][i.add(s).x][1] in [EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR]):
@@ -2759,8 +2760,10 @@ class Player:
             self.survey_mode = 10
         
         elif self.survey_mode == follow_bot:    # have it be able to try to kill builder bot
+            print(f"Survey_mode 3")
             if self.bot_target not in ct.get_nearby_entities():
                 self.bot_target = None
+                self.survey_mode = 10
                 return
             self.target = ct.get_position(self.bot_target)
             print(f"Survey_mode 3, ({self.target.x},{self.target.y})")
