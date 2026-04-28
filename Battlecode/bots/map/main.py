@@ -219,12 +219,23 @@ class Player:
             elif marker_status == 9 and self.enemy_core_pos == Position(1000, 1000):
                 self.enemy_core_pos = Position((marker_value % (2 ** 12)) // (2 ** 6), marker_value % (2 ** 6))
 
-
-        if team == self.team and self.map[tile.y][tile.x][1] in [EntityType.CONVEYOR, EntityType.CORE, EntityType.HARVESTER, EntityType.FOUNDRY, EntityType.BRIDGE, EntityType.SPLITTER]:
-            if (self.bot_target == None or self.bot_target not in self.bots_vision_radius) and len(self.bots_vision_radius) != 0:
-                self.bot_target = self.bots_vision_radius[0]    # Could be smarter choice
-                self.prev_status = self.status
-                self.status = SURVEY_SUPPLY_LINES
+        if (self.bot_target == None or self.bot_target not in self.bots_vision_radius) and len(self.bots_vision_radius) != 0:
+            for bot in self.bots_vision_radius:
+                pos = ct.get_position(bot)
+                tiles = self.centre_vision(pos, 8)
+                track = False
+                for tile in tiles:
+                    map_tile = self.map[tile[1]][tile[0]]
+                    if not self.is_on_map(Position(tile[0], tile[1])):
+                        continue
+                    if map_tile[1] in [EntityType.CONVEYOR, EntityType.BRIDGE, EntityType.SPLITTER, EntityType.CORE, EntityType.FOUNDRY, EntityType.HARVESTER] and map_tile[2] == self.team:
+                        track = True
+                        break
+                if track:
+                    self.bot_target = bot    # Could be smarter choice
+                    self.prev_status = self.status
+                    self.status = SURVEY_SUPPLY_LINES
+                    break
         if self.bot_target not in self.bots_vision_radius:
             bot_target = None
 
@@ -943,7 +954,7 @@ class Player:
         else:
             if self.built_harvester[1] is not None:
                 if self.map[self.built_harvester[1].y][self.built_harvester[1].x][1] == EntityType.CORE:
-                    print("Path Building Complete")
+                    print("Path Building Complete 1")
                     self.mined_tit_count += 1
                     self.built_harvester = [False, None, None]
                     self.ore_target = None
@@ -1052,7 +1063,7 @@ class Player:
                     splitter_dir = self.pos.direction_to(path[0] if path[0] != self.pos else path[1])
                     if ct.can_build_splitter(path[0], splitter_dir):
                         ct.build_splitter(path[0], splitter_dir)
-                        print("Path Building Complete")
+                        print("Path Building Complete 2")
                         self.mined_tit_count += 1
                         self.built_harvester = [False, None, None]
                         self.ore_target = None
@@ -1118,8 +1129,8 @@ class Player:
                     print("Waiting for money to build conveyor")
                     return
 
-            if self.map[path[1].y][path[1].x][1] in [EntityType.SPLITTER, EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR, EntityType.BRIDGE]: # Include EntityType.CORE
-                print("Path Building Complete")
+            if self.map[path[1].y][path[1].x][1] in [EntityType.SPLITTER, EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR, EntityType.BRIDGE] and self.map[path[0].y][path[0].x][1] in [EntityType.SPLITTER, EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR, EntityType.BRIDGE]: # Include EntityType.CORE
+                print("Path Building Complete 3")
                 self.mined_tit_count += 1
                 self.built_harvester = [False, None, None]
                 self.ore_target = None
