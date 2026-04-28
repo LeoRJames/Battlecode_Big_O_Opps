@@ -1039,10 +1039,10 @@ class Player:
                 if ct.can_build_bridge(path[0], path[1]):
                     ct.build_bridge(path[0], path[1])
                     self.built_harvester[1] = path[1]
-                elif self.map[path[0].y][path[0].x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE] and self.map[path[0].y][path[0].x][2] == self.team:
-                    move_dir = self.pos.direction_to(path[0])
-                    if ct.can_move(move_dir):
-                        ct.move(move_dir)
+                elif self.map[path[0].y][path[0].x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER] and self.map[path[0].y][path[0].x][2] == self.team:
+                    self.built_harvester[1] = Position(path[0].x, path[0].y).add(self.map[path[0].y][path[0].x][3][0])
+                elif self.map[path[0].y][path[0].x][1] in [EntityType.BRIDGE] and self.map[path[0].y][path[0].x][2] == self.team:
+                    self.built_harvester[1] = self.map[path[0].y][path[0].x][3][0]
                 elif ct.get_bridge_cost()[0] > ct.get_global_resources()[0]:
                     print("Waiting for money to build bridge")
                     return
@@ -1121,10 +1121,10 @@ class Player:
                             ct.move(move_dir)
                         else:
                             self.built_harvester[1] = path[0]
-                elif self.map[path[0].y][path[0].x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE] and self.map[path[0].y][path[0].x][2] == self.team:
-                    move_dir = self.pos.direction_to(path[0])
-                    if ct.can_move(move_dir):
-                        ct.move(move_dir)
+                elif self.map[path[0].y][path[0].x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER] and self.map[path[0].y][path[0].x][2] == self.team:
+                    self.built_harvester[1] = Position(path[0].x, path[0].y).add(self.map[path[0].y][path[0].x][3][0])
+                elif self.map[path[0].y][path[0].x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER] and self.map[path[0].y][path[0].x][2] == self.team:
+                    self.built_harvester[1] = self.map[path[0].y][path[0].x][3][0]
                 elif ct.get_conveyor_cost()[0] > ct.get_global_resources()[0]:
                     print("Waiting for money to build conveyor")
                     return
@@ -2374,10 +2374,10 @@ class Player:
             if target_tile[1] not in [EntityType.GUNNER, EntityType.SENTINEL, EntityType.BREACH] or target_tile[2] == self.team or map_tile[1] in [EntityType.GUNNER, EntityType.SENTINEL, EntityType.BREACH]:
                 self.defence_mode = 10
                 return
-
-            #if map_tile[1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE]:
-            #    self.defence_mode = 10
-            #    return
+            # NECESSARY CHECK FOR SOME REASON
+            if map_tile[1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE]:
+                self.defence_mode = 10
+                return
 
             if ct.can_destroy(self.target):
                 ct.destroy(self.target)
@@ -3222,6 +3222,11 @@ class Player:
 
         if self.pos.distance_squared(self.core_pos) > 8:
             self.explore(ct)
+        elif self.pos.distance_squared(self.core_pos) <= 2 and self.enemy_core_pos != Position(1000, 1000):
+            temp = self.target
+            self.target = self.enemy_core_pos
+            self.explore(ct)
+            self.target = temp
 
     def run(self, ct: Controller) -> None:
 
