@@ -2639,6 +2639,15 @@ class Player:
             print("Nothing to do!", self.defence_mode)
             if ct.get_hp() < ct.get_max_hp() and ct.can_heal(self.pos):
                 ct.heal(self.pos)
+            counter = 0
+            if 20 >self.pos.distance_squared(self.core_pos) > 2 :
+                for i in [self.core_pos.add(j) for j in [Direction.CENTRE] + DIRECTIONS]:
+                    if self.map[i.y][i.x][4] == EntityType.BUILDER_BOT:
+                        counter += 1
+                if counter > 4:
+                    self.status = SURVEY_SUPPLY_LINES
+
+
             if self.pos.distance_squared(self.core_pos) > 3:
                 self.target = self.core_pos
                 self.explore(ct)
@@ -2686,6 +2695,14 @@ class Player:
 
         start_time = ct.get_cpu_time_elapsed()
 
+        if 25 > self.pos.distance_squared(self.core_pos) and ct.get_hp(ct.get_tile_building_id(self.core_pos)):
+            '''counter = 0
+            for i in [self.core_pos.add(j) for j in [Direction.CENTRE] + DIRECTIONS]:
+                if self.map[i.y][i.x][4] == EntityType.BUILDER_BOT:
+                    counter += 1
+            if counter < 4:'''
+            self.status = DEFENCE
+
         for i in vision_tiles:
             if self.built_harvester[1] is not None or self.want_to_mine:
                 continue
@@ -2695,51 +2712,6 @@ class Player:
 
             # Check if enemy turret needs destroying
             if i_building in [EntityType.GUNNER, EntityType.SENTINEL, EntityType.BREACH] and i_team != self.team: # and self.survey_mode >= destroy_turret_food:
-
-                '''for tile in self.centre_vision(self.pos, 20):
-                    pos_tile = Position(tile[0], tile[1])
-                    if not self.is_on_map(pos_tile):
-                        continue
-                    map_tile = self.map[tile[1]][tile[0]]
-                    if map_tile[4] != None:
-                        continue
-                    if map_tile[1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE]:
-                        end, team, pos = self.simple_supply_connectivity(ct, pos_tile)
-                        if pos == i:
-                            self.target = pos_tile
-                            self.survey_mode = destroy_turret_food
-                            self.survey_target = i
-                            break
-                    elif map_tile[1] in [EntityType.HARVESTER, FOUNDRY] and self.tuple_distance_squared(tile, (i.x, i.y)) == 1: # Should be able to change
-                        for s in STRAIGHTS:
-                            adj_tile = pos_tile.add(s)
-                            if not self.is_on_map(adj_tile):
-                                continue
-                            if adj_tile.distance_squared(i) > 2:
-                                continue
-                            map_adj_tile = self.map[adj_tile.y][adj_tile.x]
-                            if map_adj_tile[0] == Environment.WALL:
-                                continue
-                            if map_adj_tile[1] in [EntityType.SENTINEL, EntityType.GUNNER, EntityType.BREACH] and map_adj_tile[2] == self.team:
-                                print("Defence already built")
-                                continue
-                            elif map_adj_tile[1] not in [EntityType.HARVESTER, EntityType.FOUNDRY, EntityType.CORE] and map_adj_tile[2] == self.team:
-                                self.target = adj_tile
-                                self.survey_mode = destroy_turret_food
-                                self.survey_target = i
-                                break
-                            elif map_adj_tile[1] in [EntityType.ROAD, None, EntityType.CONVEYOR, EntityType.BRIDGE, EntityType.SPLITTER] and map_adj_tile[2] != self.team:
-                                self.target = adj_tile
-                                self.survey_mode = destroy_turret_food
-                                self.survey_target = i
-                        if self.survey_mode != destroy_turret_food and map_tile[2] == self.team:
-                            self.target = pos_tile
-                            self.survey_mode = destroy_turret_food
-                            self.survey_target = i
-                            break
-                    if self.survey_mode == destroy_turret_food:
-                        break'''
-
                 for s in STRAIGHTS:
                     tile = i.add(s)
                     if not ct.is_in_vision(tile) or not self.is_on_map(tile) or (self.map[tile.y][tile.x][4] is not None and ct.get_team(ct.get_tile_builder_bot_id(tile)) == self.team):
@@ -3353,7 +3325,7 @@ class Player:
                 return
 
         target = self.pos
-        for i in range(3):
+        for i in range(2):
             target = target.add(d)
             if not( self.is_on_map(target)):
                 break
@@ -3716,8 +3688,8 @@ class Player:
         etype = ct.get_entity_type()
 
         if etype == EntityType.CORE:
-            #if ct.get_current_round() > 600:
-                #ct.resign()
+            if ct.get_current_round() > 600:
+                ct.resign()
 
             if self.team == None:
                 self.team = ct.get_team()
