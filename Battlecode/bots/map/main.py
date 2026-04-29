@@ -1798,7 +1798,7 @@ class Player:
                             enemy_supply = pos.add(tile[3][0])
                         else:   # Bridge
                             enemy_supply = tile[3][0]
-                elif tile[4] != None and ct.get_team(ct.get_tile_builder_bot_id(pos)) != self.team:
+                elif tile[4] != None and ct.is_in_vision(pos) and ct.get_team(ct.get_tile_builder_bot_id(pos)) != self.team:
                     enemy_supply = pos
             self.target = Position(1000, 1000)
             if enemy_supply == False:
