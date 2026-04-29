@@ -2247,7 +2247,7 @@ class Player:
             i_building, i_direction, i_team = self.map[i.y][i.x][1], self.map[i.y][i.x][3][0], self.map[i.y][i.x][2]
             i_id = ct.get_tile_building_id(i)
 
-            if self.core_pos.distance_squared(i) >= 36:
+            if self.core_pos.distance_squared(i) >= 61:
                 continue
 
             # Check if enemy turret needs destroying
@@ -4175,15 +4175,13 @@ class Player:
 
                 if bot is not None and ct.get_team(ct.get_tile_builder_bot_id(tile)) != self.team:
                     target = tile
+                    break
                 elif building == EntityType.CORE and team != self.team and (bot is None or ct.get_team(ct.get_tile_builder_bot_id(tile)) != self.team):   # Prioritise attacking core
                     target = tile
-                    break
                 elif team != self.team and building not in [EntityType.HARVESTER, EntityType.MARKER, EntityType.ROAD] and not (bot != None and ct.get_team(ct.get_tile_builder_bot_id(tile)) == self.team):     # Then enemy buildings
                     end, own_team, pos = self.simple_supply_connectivity(ct, tile)
                     if not (end != None and own_team == True):
                         target = tile
-                elif bot is not None and target is None and ct.get_team(ct.get_tile_builder_bot_id(tile)) != self.team:   # Then enemy builder bots
-                    target = tile
 
             if target is not None and ct.can_fire(target):
                     ct.fire(target)
