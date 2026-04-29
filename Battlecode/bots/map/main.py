@@ -744,7 +744,7 @@ class Player:
                 if (nx,ny) in self.launcher_tiles:
                     new_cost += 2
                 if self.map[ny][nx][1] == EntityType.BARRIER:
-                    new_cost += 2
+                    new_cost += 1
                 if (nx, ny) not in cost_so_far or new_cost < cost_so_far[(nx, ny)]:
                     cost_so_far[(nx, ny)] = new_cost
                     priority = new_cost + heuristic((nx, ny))
