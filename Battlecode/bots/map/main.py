@@ -4,8 +4,6 @@ from collections import deque
 from cambc import Controller, Direction, EntityType, Environment, Position, ResourceType
 import heapq
 
-from rich.layout import Splitter
-
 # non-centre directions
 DIRECTIONS = [d for d in Direction if d != Direction.CENTRE]
 STRAIGHTS = [Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST]
@@ -3649,7 +3647,7 @@ class Player:
                     print("DDDD2", i)
 
             # Find Conveyor leading to enemy buildings
-            elif self.attack_mode >= idk_what_to_call_this_equal_2 and i_building in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, Splitter] and (self.pos.distance_squared(self.target) > self.pos.distance_squared(pos) or self.attack_mode > idk_what_to_call_this_equal_2):
+            elif self.attack_mode >= idk_what_to_call_this_equal_2 and i_building in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, EntityType.SPLITTER] and (self.pos.distance_squared(self.target) > self.pos.distance_squared(pos) or self.attack_mode > idk_what_to_call_this_equal_2):
                 end_entity, end_team, end_pos = self.simple_supply_connectivity(ct, pos)
                 if end_entity is not None and end_team != self.team:
                     self.target = pos
