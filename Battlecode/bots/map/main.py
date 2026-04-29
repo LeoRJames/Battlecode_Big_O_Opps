@@ -103,6 +103,7 @@ class Player:
         self.track_own_markers = []
         self.want_to_mine = False
         self.launcher_tiles = []
+        self.destroy_current = True
         
         self.explore_radius = 1
         self.corner_index = 0
@@ -1094,12 +1095,30 @@ class Player:
                     self.pathfinder_fail_count = 0
                     self.try_avoid = True
                     return
+                elif self.map[self.built_harvester[1].y][self.built_harvester[1].x][2] != self.team and self.map[self.built_harvester[1].y][self.built_harvester[1].x][1] != EntityType.MARKER:
+                    if len(self.map[self.built_harvester[1].y][self.built_harvester[1].x][3]) > 1:
+                        self.built_harvester[1] = self.map[self.built_harvester[1].y][self.built_harvester[1].x][3][0]
+                        self.destroy_current = True
+                    elif self.map[self.pos.y][self.pos.x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR]:
+                        if ct.can_destroy(self.pos):
+                            ct.destroy(self.pos)
+                        adj_tiles = self.centre_vision(self.pos, 2)
+                        for tile in adj_tiles:
+                            map_tile = self.map[tile[1]][tile[0]]
+                            pos = Position(tile[0], tile[1])
+                            if map_tile[1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR] and map_tile[3][0] == pos.direction_to(self.pos):
+                                self.built_harvester[1] = pos
                 print(f"Going to {self.built_harvester[1]}")
                 if self.pos != self.built_harvester[1]:
                     self.target = self.built_harvester[1]
                     self.explore(ct)
-                    return
+                    if self.pos != self.built_harvester[1]:
+                        return
                 #self.built_harvester[1] = None
+            if self.destroy_current:
+                if ct.can_destroy(self.pos):
+                    ct.destroy(self.pos)
+                    self.destroy_current = False
 
             if self.built_harvester[2] in self.mined_tit and (len(self.mined_tit) % 5) == 0 and self.try_avoid:
                 if self.map[self.pos.y][self.pos.x][1] in [EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR, EntityType.SPLITTER] and self.map[self.pos.y][self.pos.x][2] == self.team:
