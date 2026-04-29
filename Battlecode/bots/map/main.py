@@ -2233,13 +2233,14 @@ class Player:
         '''
 
         destroy_turret_food =  1
-        destroy_turret = 3
-        heal = 4
-        reconnect_conveyors = 2
+        destroy_turret = 2
+        heal = 3
+        reconnect_conveyors = 4
         build_defences = 5
         # Work in progress
         upgrade_conveyors = 6
         destroy_roads = 7
+        add_launchers = 8
 
         vision_tiles = ct.get_nearby_tiles()
         if self.defence_mode == 10:  # Used as a scale for how important each job is
@@ -2398,6 +2399,17 @@ class Player:
             elif self.defence_mode >= destroy_roads and self.pos.distance_squared(self.core_pos) <= 2 and i.distance_squared(self.core_pos) <= 8 and ((i_building in [EntityType.ROAD] and i_team == self.team) or (i_building in [EntityType.ROAD] and i_team != self.team and ct.get_global_resources()[0] > 500) or (i_building in [EntityType.BARRIER] and i_team == self.team)):
                 self.target = i
                 self.defence_mode = destroy_roads
+
+            # LAUCNCHERS!!! (spaced out)
+            elif self.defence_mode >= add_launchers and i_building in [None, EntityType.ROAD] and 8 < i.distance_squared(self.core_pos) <= 16 and (self.pos.distance_squared(self.target) > self.pos.distance_squared(i) or self.attack_mode > add_launchers):
+                launcher_nearby = False
+                for d in DIRECTIONS:
+                    if self.is_on_map(i.add(d)) and self.map[i.add(d).y][i.add(d).x][1] == EntityType.LAUNCHER:
+                        launcher_nearby = True
+                        break
+                if not launcher_nearby:
+                    self.defence_mode = add_launchers
+                    self.target = i
 
         print(f"time  mode  target  def_tar")
         print(f"{ct.get_cpu_time_elapsed() - start_time:04d}   {self.defence_mode:02d}   ({self.target.x:2d},{self.target.y:2d})  ({f'{self.defence_target.x:2d}' if self.defence_target.x != 1000 else '-1'}, {f'{self.defence_target.y:2d}' if self.defence_target.y != 1000 else '-1'})")
@@ -2586,6 +2598,19 @@ class Player:
                 ct.destroy(self.target)
             elif ct.can_fire(self.target):
                 ct.fire(self.target)
+            self.defence_mode = 10
+
+        elif self.defence_mode == add_launchers:
+            if self.pos == self.target:
+                for d in DIRECTIONS:
+                    if ct.can_move(d):
+                        ct.move(d)
+            if ct.can_destroy(self.target):
+                ct.destroy(self.target)
+            if ct.can_fire(self.target):
+                ct.fire(self.target)
+            if ct.can_build_launcher(self.target):
+                ct.build_launcher(self.target)
             self.defence_mode = 10
 
         else:
@@ -3518,6 +3543,7 @@ class Player:
                     self.target = pos
                     self.attack_mode = idk_what_to_call_this_equal_2
 
+            # LAUCNCHERS!!! (spaced out)
             elif self.attack_mode >= add_launchers and i_building in [None, EntityType.ROAD] and pos.distance_squared(self.enemy_core_pos) <= 16 and (self.pos.distance_squared(self.target) > self.pos.distance_squared(pos) or self.attack_mode > add_launchers):
                 launcher_nearby = False
                 for d in DIRECTIONS:
@@ -4226,12 +4252,26 @@ class Player:
                 self.team = ct.get_team()
                 self.id = ct.get_id()
 
+
+            if self.core_pos == Position(1000, 1000):
+                for id in ct.get_nearby_entities():
+                    if ct.get_entity_type(id) == EntityType.CORE and ct.get_team(id) == self.team:
+                        self.core_pos = ct.get_position(id)
+                if self.core_pos == Position(1000, 1000):
+                    self.core_pos = Position(2000, 2000)
+
+            if self.core_pos != Position(2000,2000):
+                direction = self.core_pos.direction_to(self.pos)
+            else:
+                direction = None
+
             for i in ct.get_nearby_tiles(5):
                 map_tile = self.map[i.y][i.x]
                 if map_tile[4] == EntityType.BUILDER_BOT and ct.get_team(ct.get_tile_builder_bot_id(i)) != self.team:
-                    direction = self.pos.direction_to(i)
+                    if direction is None:
+                        direction = self.pos.direction_to(i)
                     print(i,direction)
-                    targets = [self.pos.add(direction).add(direction).add(direction).add(direction).add(d) for d in [Direction.CENTRE] + DIRECTIONS]
+                    targets = [self.pos.add(direction).add(direction).add(direction).add(direction).add(d) for d in [Direction.CENTRE] + DIRECTIONS] + [self.pos.add(direction).add(direction).add(direction).add(d) for d in [Direction.CENTRE] + DIRECTIONS]
                     for target in targets:
                         if ct.can_launch(i,target):
                             ct.launch(i,target)
