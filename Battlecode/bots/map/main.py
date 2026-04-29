@@ -4046,7 +4046,7 @@ class Player:
                     for tiles in core_bots:
                         if self.map[tiles[1]][tiles[0]][4] != None:
                             core_bot_count += 1
-                            if core_bot_count >= 3:
+                            if core_bot_count >= 5:
                                 self.status = SURVEY_SUPPLY_LINES
                                 return
                 self.defence(ct)
