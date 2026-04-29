@@ -962,7 +962,7 @@ class Player:
                     exists = True if 0 <= check_location.x < len(self.map[0]) and 0 <= check_location.y < len(self.map) else False
                     if exists:
                         is_not_wall = True if self.map[check_location.y][check_location.x][0] != Environment.WALL else False
-                        if is_not_wall and self.map[check_location.y][check_location.x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.ROAD, EntityType.BRIDGE, EntityType.SPLITTER, EntityType.BARRIER, EntityType.MARKER, None] and self.map[check_location.y][check_location.x][2] in [self.team, None]:
+                        if is_not_wall and self.map[check_location.y][check_location.x][1] == EntityType.MARKER or (self.map[check_location.y][check_location.x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.ROAD, EntityType.BRIDGE, EntityType.SPLITTER, EntityType.BARRIER, None] and self.map[check_location.y][check_location.x][2] in [self.team, None]):
                             if self.built_harvester[1] == None or check_location.distance_squared(self.core_pos) <= self.built_harvester[1].distance_squared(self.core_pos):
                                 can_build_harvester = True
                                 self.built_harvester[1] = check_location
@@ -1079,11 +1079,12 @@ class Player:
                 if self.map[self.built_harvester[1].y][self.built_harvester[1].x][1] == EntityType.CORE:
                     print("Path Building Complete 1")
                     if ore.distance_squared(self.core_pos) > 36:
-                        if ore in self.mined_tit:
+                        if ore in self.mined_tit and ore not in self.tit_survey:
                             self.tit_survey.append(ore)
-                        elif ore in self.mined_ax:
+                        elif ore in self.mined_ax and ore not in self.ax_survey:
                             self.ax_survey.append(ore)
-                        self.ore_survey.append(ore)
+                        if ore not in self.ore_survey:
+                            self.ore_survey.append(ore)
                     self.mined_tit_count += 1
                     self.built_harvester = [False, None, None]
                     self.ore_target = None
@@ -1179,11 +1180,12 @@ class Player:
                     else:
                         print("Path Building Complete 6")
                         if ore.distance_squared(self.core_pos) > 36:
-                            if ore in self.mined_tit:
+                            if ore in self.mined_tit and ore not in self.tit_survey:
                                 self.tit_survey.append(ore)
-                            elif ore in self.mined_ax:
+                            elif ore in self.mined_ax and ore not in self.ax_survey:
                                 self.ax_survey.append(ore)
-                            self.ore_survey.append(ore)
+                            if ore not in self.ore_survey:
+                                self.ore_survey.append(ore)
                         self.mined_tit_count += 1
                         self.built_harvester = [False, None, None]
                         self.ore_target = None
@@ -1196,11 +1198,12 @@ class Player:
                     else:
                         print("Path Building Complete 7")
                         if ore.distance_squared(self.core_pos) > 36:
-                            if ore in self.mined_tit:
+                            if ore in self.mined_tit and ore not in self.tit_survey:
                                 self.tit_survey.append(ore)
-                            elif ore in self.mined_ax:
+                            elif ore in self.mined_ax and ore not in self.ax_survey:
                                 self.ax_survey.append(ore)
-                            self.ore_survey.append(ore)
+                            if ore not in self.ore_survey:
+                                self.ore_survey.append(ore)
                         self.mined_tit_count += 1
                         self.built_harvester = [False, None, None]
                         self.ore_target = None
@@ -1228,11 +1231,12 @@ class Player:
                         ct.build_splitter(path[0], splitter_dir)
                         print("Path Building Complete 2")
                         if ore.distance_squared(self.core_pos) > 36:
-                            if ore in self.mined_tit:
+                            if ore in self.mined_tit and ore not in self.tit_survey:
                                 self.tit_survey.append(ore)
-                            elif ore in self.mined_ax:
+                            elif ore in self.mined_ax and ore not in self.ax_survey:
                                 self.ax_survey.append(ore)
-                            self.ore_survey.append(ore)
+                            if ore not in self.ore_survey:
+                                self.ore_survey.append(ore)
                         self.mined_tit_count += 1
                         self.built_harvester = [False, None, None]
                         self.ore_target = None
@@ -1296,11 +1300,12 @@ class Player:
                     else:
                         print("Path Building Complete 4")
                         if ore.distance_squared(self.core_pos) > 36:
-                            if ore in self.mined_tit:
+                            if ore in self.mined_tit and ore not in self.tit_survey:
                                 self.tit_survey.append(ore)
-                            elif ore in self.mined_ax:
+                            elif ore in self.mined_ax and ore not in self.ax_survey:
                                 self.ax_survey.append(ore)
-                            self.ore_survey.append(ore)
+                            if ore not in self.ore_survey:
+                                self.ore_survey.append(ore)
                         self.mined_tit_count += 1
                         self.built_harvester = [False, None, None]
                         self.ore_target = None
@@ -1313,11 +1318,12 @@ class Player:
                     else:
                         print("Path Building Complete 5")
                         if ore.distance_squared(self.core_pos) > 36:
-                            if ore in self.mined_tit:
+                            if ore in self.mined_tit and ore not in self.tit_survey:
                                 self.tit_survey.append(ore)
-                            elif ore in self.mined_ax:
+                            elif ore in self.mined_ax and ore not in self.ax_survey:
                                 self.ax_survey.append(ore)
-                            self.ore_survey.append(ore)
+                            if ore not in self.ore_survey:
+                                self.ore_survey.append(ore)
                         self.mined_tit_count += 1
                         self.built_harvester = [False, None, None]
                         self.ore_target = None
@@ -1330,11 +1336,12 @@ class Player:
             if self.map[path[1].y][path[1].x][1] in [EntityType.SPLITTER, EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR, EntityType.BRIDGE, EntityType.CORE] and self.map[path[0].y][path[0].x][1] in [EntityType.SPLITTER, EntityType.ARMOURED_CONVEYOR, EntityType.CONVEYOR, EntityType.BRIDGE, EntityType.CORE]: # Include EntityType.CORE
                 print("Path Building Complete 3")
                 if ore.distance_squared(self.core_pos) > 36:
-                    if ore in self.mined_tit:
+                    if ore in self.mined_tit and ore not in self.tit_survey:
                         self.tit_survey.append(ore)
-                    elif ore in self.mined_ax:
+                    elif ore in self.mined_ax and ore not in self.ax_survey:
                         self.ax_survey.append(ore)
-                    self.ore_survey.append(ore)
+                    if ore not in self.ore_survey:
+                        self.ore_survey.append(ore)
                 self.mined_tit_count += 1
                 self.built_harvester = [False, None, None]
                 self.ore_target = None
@@ -3018,13 +3025,13 @@ class Player:
             return
         
         else:
-            print("Other", self.target, self.ore_survey_target, self.ore_survey)
+            print("Other", self.target, self.ore_survey_target, self.ore_survey, self.tit_survey, self.ax_survey)
             if self.prev_status != None:
                 self.built_harvester = [False, None, None]
                 self.status = self.prev_status
                 self.prev_status = None
             else:
-                if self.ore_target == None and not (self.map[0][0][0] != 0 and self.map[-1][0][0] != 0 and self.map[0][-1][0] != 0 and self.map[-1][-1][0] != 0) and ((len(self.tit_survey) < 2 and len(self.tit) == 0 and not (len(self.ax) != 0 and ct.get_current_round() > 50)) or (len(self.ax_survey) < 1 and len(self.ax) == 0 and ct.get_current_round() > 50) or (len(self.ore_survey) < 4) and len(self.tit) == 0 and len(self.ax) == 0):
+                if self.ore_target == None and not (self.map[0][0][0] != 0 and self.map[-1][0][0] != 0 and self.map[0][-1][0] != 0 and self.map[-1][-1][0] != 0) and ((len(self.tit_survey) < 2 and len(self.tit) == 0 and not (len(self.ax) != 0 and ct.get_current_round() > 50)) or (len(self.ax_survey) < 1 and len(self.ax) == 0 and ct.get_current_round() > 50) or (len(self.ore_survey) < 4 and ((len(self.tit) == 0 and len(self.tit_survey) < 2) or (len(self.ax) == 0 and len(self.ax_survey) < 1)))):
                     print("explore map", self.tit_survey, self.ax_survey)
                     self.exploring_the_map(ct)
                     #self.target = Position(1000, 1000)
@@ -3039,10 +3046,10 @@ class Player:
                     if self.stored_built_harvester != None:
                         self.built_harvester = self.stored_built_harvester
                         self.stored_built_harvester = None
-                    if self.built_harvester[1] == None:
+                    '''if self.built_harvester[1] == None:
                         self.want_to_mine = True
                     else:
-                        self.want_to_mine = False
+                        self.want_to_mine = False'''
                     print(self.ore_target)
                     self.mining(ct)
                     return
@@ -3051,33 +3058,31 @@ class Player:
                     if len(self.ore_survey) == 0:
                         self.ore_survey = self.mined_tit + self.mined_ax
                     for ore in self.ore_survey:
-                        if first_ore == None or ore.distance_squared(self.pos) < first_ore.distance_squared(self.pos):
+                        if ore.distance_squared(self.pos) >= 16  and (first_ore == None or ore.distance_squared(self.pos) < first_ore.distance_squared(self.pos)):
                             first_ore = ore
                     self.ore_survey_target = first_ore
                 self.built_harvester = [False, None, None]
                 if self.ore_survey_target == None:
-                    self.status = DEFENCE
-                    self.target = Position(1000, 1000)
-                    return
+                    self.ore_survey_target = self.core_pos
                 if self.pos.distance_squared(self.ore_survey_target) > 16:  # Move between each ore and core in turn
                     self.target = self.ore_survey_target
                     self.explore(ct)
                     self.target = Position(1000, 1000)
-                    if ct.get_position().distance_squared(self.ore_survey_target) <= 16:
-                        if self.ore_survey_target == self.core_pos:
-                            length = len(self.ore_survey)
-                            for i in range(length):
-                                if self.ore_survey[i] == self.prev_ore_survey_target:
-                                    if i == length - 1:
-                                        self.ore_survey_target = self.ore_survey[0]
-                                    else:
-                                        self.ore_survey_target = self.ore_survey[i+1]
-                                    break
-                        else:
-                            self.prev_ore_survey_target = self.ore_survey_target
-                            self.ore_survey_target = self.core_pos
                 else:
-                    self.exploring_the_map(ct)
+                    if self.ore_survey_target == self.core_pos:
+                        length = len(self.ore_survey)
+                        for i in range(length):
+                            if self.ore_survey[i] == self.prev_ore_survey_target:
+                                if i == length - 1:
+                                    self.ore_survey_target = self.ore_survey[0]
+                                else:
+                                    self.ore_survey_target = self.ore_survey[i+1]
+                                break
+                    else:
+                        self.prev_ore_survey_target = self.ore_survey_target
+                        self.ore_survey_target = self.core_pos
+                    self.target = self.ore_survey_target
+                    self.explore(ct)
                     self.target = Position(1000, 1000)
 
     def should_mine(self):
@@ -4044,7 +4049,8 @@ class Player:
                                                         [self.core_pos.x, ct.get_map_height() - 1 - self.core_pos.y],  # Vertical Flip
                                                         [ct.get_map_width() - 1 - self.core_pos.x, ct.get_map_height() - 1 - self.core_pos.y]]  # Rotation
                 elif len(self.mined_tit) == 0:
-                    self.status = ATTACK_ENEMY_CORE
+                    self.exploring_the_map(ct)
+                    #self.status = ATTACK_ENEMY_CORE
                 else:
                     self.moving_turret(ct, self.enemy_core_pos)
 
