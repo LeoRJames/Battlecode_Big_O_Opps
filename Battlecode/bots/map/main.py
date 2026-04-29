@@ -2866,7 +2866,7 @@ class Player:
                 self.survey_mode = 10
                 if self.pos.distance_squared(self.target) >= 4:
                     self.explore(ct)
-                    ct.resign()
+                    #ct.resign()
             return
         
         elif self.survey_mode == heal:
@@ -3542,7 +3542,7 @@ class Player:
                     self.attack_mode = idk_what_to_call_this_equal_2
 
             # LAUCNCHERS!!! (spaced out)
-            elif self.attack_mode >= add_launchers and i_building in [None, EntityType.ROAD] and pos.distance_squared(self.enemy_core_pos) <= 16 and (self.pos.distance_squared(self.target) > self.pos.distance_squared(pos) or self.attack_mode > add_launchers):
+            elif self.attack_mode >= add_launchers and self.is_tile_buildable(self.target) and i_building in [None, EntityType.ROAD] and pos.distance_squared(self.enemy_core_pos) <= 16 and (self.pos.distance_squared(self.target) > self.pos.distance_squared(pos) or self.attack_mode > add_launchers):
                 launcher_nearby = False
                 for d in DIRECTIONS:
                     if self.is_on_map(pos.add(d)) and self.map[pos.add(d).y][pos.add(d).x][1] == EntityType.LAUNCHER:
@@ -3716,8 +3716,8 @@ class Player:
         etype = ct.get_entity_type()
 
         if etype == EntityType.CORE:
-            if ct.get_current_round() > 600:
-                ct.resign()
+            #if ct.get_current_round() > 600:
+                #ct.resign()
 
             if self.team == None:
                 self.team = ct.get_team()
