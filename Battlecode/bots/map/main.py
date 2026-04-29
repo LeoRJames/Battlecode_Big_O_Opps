@@ -4319,7 +4319,9 @@ class Player:
                 map_tile = self.map[tile.y][tile.x]
                 building, team, bot = map_tile[1], map_tile[2], map_tile[4]
 
-                if building == EntityType.CORE and team != self.team and (bot is None or ct.get_team(ct.get_tile_builder_bot_id(tile)) != self.team):   # Prioritise attacking core
+                if bot is not None and ct.get_team(ct.get_tile_builder_bot_id(tile)) != self.team:
+                    target = tile
+                elif building == EntityType.CORE and team != self.team and (bot is None or ct.get_team(ct.get_tile_builder_bot_id(tile)) != self.team):   # Prioritise attacking core
                     target = tile
                     break
                 elif team != self.team and building not in [EntityType.HARVESTER, EntityType.MARKER, EntityType.ROAD] and not (bot != None and ct.get_team(ct.get_tile_builder_bot_id(tile)) == self.team):     # Then enemy buildings
