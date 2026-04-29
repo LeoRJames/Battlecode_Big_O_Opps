@@ -2843,7 +2843,7 @@ class Player:
             if self.survey_mode >= reconnect_conveyors and self.built_harvester[1] == None and i_building in [EntityType.HARVESTER] and self.map[i.y][i.x][0] in [Environment.ORE_TITANIUM, Environment.ORE_AXIONITE]  and self.survey_mode >= reconnect_conveyors:
                 reject = False
                 for s in STRAIGHTS:
-                    if self.is_on_map(i.add(s)) and (self.map[i.add(s).y][i.add(s).x][1] in [EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER] or self.map[i.add(s).y][i.add(s).x][4] != None):
+                    if self.is_on_map(i.add(s)) and self.map[i.add(s).y][i.add(s).x][0] != Environment.WALL and (self.map[i.add(s).y][i.add(s).x][1] in [EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER] or self.map[i.add(s).y][i.add(s).x][4] != None):
                         reject = True
                 if i not in self.unreachable_tiles and not reject:
                     if self.pos.distance_squared(i) < self.target.distance_squared(self.pos) or self.target == self.core_pos:
