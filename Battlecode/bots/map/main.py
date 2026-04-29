@@ -482,17 +482,18 @@ class Player:
 
                 if avoid:
                     valid = (
-                        tile[1] in [EntityType.MARKER, EntityType.ROAD,
+                        (tile[1] in [EntityType.ROAD,
                                     EntityType.CORE]
-                        and tile[2] == team
+                        and tile[2] == team) or (tile[1] == EntityType.MARKER)
                     )
                 else:
                     valid = (
-                        tile[1] in [EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE,
-                                    EntityType.CONVEYOR, EntityType.MARKER,
+                        (tile[1] in [EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE,
+                                    EntityType.CONVEYOR,
                                     EntityType.ROAD, EntityType.CORE,
                                     EntityType.SPLITTER]
-                        and tile[2] == team
+                        and tile[2] == team) or 
+                        (tile[1] == EntityType.MARKER)
                     )
 
                 if valid or (tile[1] is None and tile[0] == Environment.EMPTY):
@@ -521,17 +522,17 @@ class Player:
 
             if avoid:
                 valid = (
-                    tile[1] in [EntityType.MARKER, EntityType.ROAD,
+                    (tile[1] in [EntityType.ROAD,
                                 EntityType.CORE]
-                    and tile[2] == team
+                    and tile[2] == team) or (tile[1] == EntityType.MARKER)
                 )
             else:
                 valid = (
-                    tile[1] in [EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE,
-                                EntityType.CONVEYOR, EntityType.MARKER,
+                    (tile[1] in [EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE,
+                                EntityType.CONVEYOR,
                                 EntityType.ROAD, EntityType.CORE,
                                 EntityType.SPLITTER]
-                    and tile[2] == team
+                    and tile[2] == team) or (tile[1] == EntityType.MARKER)
                 )
 
             if valid or (tile[1] is None and tile[0] == Environment.EMPTY):
