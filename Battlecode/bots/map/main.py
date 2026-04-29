@@ -2260,20 +2260,19 @@ class Player:
         reconnect_conveyors = 4
         build_defences = 5
         # Work in progress
-        upgrade_conveyors = 6
-        destroy_roads = 7
-        add_launchers = 8
+        add_launchers = 6
+        upgrade_conveyors = 7
+        destroy_roads = 8
 
         vision_tiles = ct.get_nearby_tiles()
         if self.defence_mode == 10:  # Used as a scale for how important each job is
             self.target = self.core_pos
 
         global_tit, global_ax = ct.get_global_resources()
-        can_afford_harvester, can_afford_sentinel, can_afford_foundry = (ct.get_harvester_cost()[0] < global_tit), (ct.get_sentinel_cost()[0]< global_tit), (ct.get_foundry_cost()[0]< global_tit)
+        can_afford_harvester, can_afford_sentinel, can_afford_foundry, can_afford_launcher, can_afford_gunner = (ct.get_harvester_cost()[0] < global_tit), (ct.get_sentinel_cost()[0]< global_tit), (ct.get_foundry_cost()[0]< global_tit) , (ct.get_launcher_cost()[0]< global_tit) , (ct.get_gunner_cost()[0]< global_tit)
 
         start_time = ct.get_cpu_time_elapsed()
         for i in vision_tiles:
-            building_targets = None
             i_building, i_direction, i_team = self.map[i.y][i.x][1], self.map[i.y][i.x][3][0], self.map[i.y][i.x][2]
             i_id = ct.get_tile_building_id(i)
 
@@ -2326,7 +2325,7 @@ class Player:
 
                     map_tile = self.map[tile.y][tile.x]
                     if map_tile[0] == Environment.WALL:
-                        pass
+                        continue
                     if map_tile[1] in [EntityType.GUNNER, EntityType.SENTINEL] and map_tile[2] == self.team and map_tile[3][0] == j.opposite():
                         print("Defence already built!")
                         break
@@ -2410,6 +2409,17 @@ class Player:
                             self.defence_mode = build_defences
                             print(self.target)
 
+            # LAUCNCHERS!!! (spaced out)
+            elif self.defence_mode >= add_launchers and i_building in [None, EntityType.ROAD] and 8 < i.distance_squared(self.core_pos) <= 16 and (self.pos.distance_squared(self.target) > self.pos.distance_squared(i) or self.attack_mode > add_launchers) and can_afford_launcher:
+                launcher_nearby = False
+                for d in DIRECTIONS:
+                    if self.is_on_map(i.add(d)) and self.map[i.add(d).y][i.add(d).x][1] == EntityType.LAUNCHER:
+                        launcher_nearby = True
+                        break
+                if not launcher_nearby:
+                    self.defence_mode = add_launchers
+                    self.target = i
+
             # Upgrade conveyors to armoured conveyors
             elif self.defence_mode >= upgrade_conveyors and i_building == EntityType.CONVEYOR and i_team == self.team:
                 resources, cost = ct.get_global_resources(), ct.get_armoured_conveyor_cost()
@@ -2422,23 +2432,13 @@ class Player:
                 self.target = i
                 self.defence_mode = destroy_roads
 
-            # LAUCNCHERS!!! (spaced out)
-            elif self.defence_mode >= add_launchers and i_building in [None, EntityType.ROAD] and 8 < i.distance_squared(self.core_pos) <= 16 and (self.pos.distance_squared(self.target) > self.pos.distance_squared(i) or self.attack_mode > add_launchers):
-                launcher_nearby = False
-                for d in DIRECTIONS:
-                    if self.is_on_map(i.add(d)) and self.map[i.add(d).y][i.add(d).x][1] == EntityType.LAUNCHER:
-                        launcher_nearby = True
-                        break
-                if not launcher_nearby:
-                    self.defence_mode = add_launchers
-                    self.target = i
-
         print(f"time  mode  target  def_tar")
         print(f"{ct.get_cpu_time_elapsed() - start_time:04d}   {self.defence_mode:02d}   ({self.target.x:2d},{self.target.y:2d})  ({f'{self.defence_target.x:2d}' if self.defence_target.x != 1000 else '-1'}, {f'{self.defence_target.y:2d}' if self.defence_target.y != 1000 else '-1'})")
 
         if self.pos.distance_squared(self.target) >= 4 and self.defence_mode != 10: # and self.defence_mode >= 3:
             print(f"Defence mode: {self.defence_mode}, target: ({self.target.x}, {self.target.y})")
             self.explore(ct)
+            self.defence_mode = 10
             if ct.get_hp() < ct.get_max_hp() and ct.can_heal(self.pos):
                 ct.heal(self.pos)
             return
@@ -2678,35 +2678,23 @@ class Player:
         destroy_turret = 2
         heal = 3
         follow_bot = 4
-        
         reconnect_conveyors = 5
 
-        # If bot has low hp, heal + move (movement hopefully keeps it out of enemy fire)
-        if ct.get_hp() < 0.5 * ct.get_max_hp():
-            print("Running and healing")
-            d = DIRECTIONS.copy()
-            random.shuffle(d)
-            for i in d:
-                if ct.can_move(i):
-                    ct.move(i)
-                if ct.can_heal(self.pos):
-                    ct.heal(self.pos)
-
         vision_tiles = ct.get_nearby_tiles()
-        '''if self.survey_mode == 10:  # Used as a scale for how important each job is
-            self.target = self.core_pos'''
-        print(ct.get_cpu_time_elapsed())
+        if self.survey_mode == 10:  # Used as a scale for how important each job is
+            self.target = self.core_pos
+
+        start_time = ct.get_cpu_time_elapsed()
+
         for i in vision_tiles:
-            if self.built_harvester[1] != None or self.want_to_mine:
+            if self.built_harvester[1] is not None or self.want_to_mine:
                 continue
-            building_targets = None
+
             i_building, i_direction, i_team = self.map[i.y][i.x][1], self.map[i.y][i.x][3][0], self.map[i.y][i.x][2]
             i_id = ct.get_tile_building_id(i)
 
             # Check if enemy turret needs destroying
-            if i_building in [EntityType.GUNNER, EntityType.SENTINEL, EntityType.BREACH] and i_team != self.team: #  and self.defence_mode >= destroy_turret_food: # and i.distance_squared(self.core_pos) < 35: # I THINK this is the range of a sentinel
-                #print(f"{i_building} at ({i.x}, {i.y})")
-                #continue
+            if i_building in [EntityType.GUNNER, EntityType.SENTINEL, EntityType.BREACH] and i_team != self.team: # and self.survey_mode >= destroy_turret_food:
 
                 '''for tile in self.centre_vision(self.pos, 20):
                     pos_tile = Position(tile[0], tile[1])
@@ -2754,9 +2742,7 @@ class Player:
 
                 for s in STRAIGHTS:
                     tile = i.add(s)
-                    if not ct.is_in_vision(tile) or not self.is_on_map(tile):
-                        continue
-                    if self.map[tile.y][tile.x][4] != None:
+                    if not ct.is_in_vision(tile) or not self.is_on_map(tile) or (self.map[tile.y][tile.x][4] is not None and ct.get_team(ct.get_tile_builder_bot_id(tile)) == self.team):
                         continue
                     if self.map[tile.y][tile.x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR] and self.map[tile.y][tile.x][3][0] == s.opposite():
                         self.target = tile
@@ -2766,32 +2752,29 @@ class Player:
                         self.target = tile
                         self.survey_mode = destroy_turret_food
                         self.survey_target = i
-                    elif self.map[tile.y][tile.x][1] in [EntityType.HARVESTER, FOUNDRY] and self.map[tile.y][tile.x][2] == self.team: # Should be able to change
+                    elif self.map[tile.y][tile.x][1] in [EntityType.HARVESTER, FOUNDRY] and self.map[tile.y][tile.x][2] == self.team:
                         self.target = tile
                         self.survey_mode = destroy_turret_food
                         self.survey_target = i
 
-                # IIRC this can only be > 1 if type is a bridge
+                # Check for bridge
                 if len(self.map[i.y][i.x][3]) > 1 and self.map[i.y][i.x][3][1] not in STRAIGHTS and self.survey_mode != destroy_turret_food:
-                    self.target = self.map[i.y][i.x][3].pop(1) # Pop to remove the bridge from the list
+                    self.target = self.map[i.y][i.x][3].pop(1)
                     self.survey_mode = destroy_turret_food
                     self.survey_target = i
 
                 if self.survey_mode == destroy_turret_food:
-                    #print(f"Need to cut off its access!")
                     break
 
                 elif not (self.survey_mode < destroy_turret):
-
                     for j in DIRECTIONS:
                         tile = i.add(j)
                         if not(self.is_on_map(tile)) or tile.distance_squared(self.core_pos) <= 2:
                             continue
 
                         map_tile = self.map[tile.y][tile.x]
-
                         if map_tile[0] == Environment.WALL:
-                            pass
+                            continue
 
                         if map_tile[1] in [EntityType.GUNNER, EntityType.SENTINEL] and map_tile[2] == self.team and map_tile[3][0] == j.opposite():
                             print("Defence already built!")
@@ -2817,49 +2800,23 @@ class Player:
 
                         # If has found a tile feeding it, break
                         if self.target == i.add(j):
-                            #print("Building not being actively supplied")
-                            #print(f"Going to destroy it with a defensive building at {self.target}")
                             break
             if self.survey_mode < heal:
                 continue
             # Check if any tiles need healing
-            if self.built_harvester[1] == None and self.survey_mode >= heal and i_building and ct.get_hp(i_id) < ct.get_max_hp(i_id) and i_team == self.team and i_building != EntityType.ROAD: # and (self.map[i.y][i.x][4] != EntityType.BUILDER_BOT or self.pos == i)
+            if self.survey_mode >= heal and i_building and ct.get_hp(i_id) < ct.get_max_hp(i_id) and i_team == self.team and i_building != EntityType.ROAD: # and (self.map[i.y][i.x][4] != EntityType.BUILDER_BOT or self.pos == i)
                 if i.distance_squared(self.pos) < self.target.distance_squared(self.pos) or self.survey_mode >= heal:
                     self.target = i
                 self.survey_mode = heal
                 continue
             
-            elif self.survey_mode >= follow_bot and self.built_harvester[1] == None and self.bot_target != None and self.bot_target in ct.get_nearby_units() and self.pos.distance_squared(ct.get_position(self.bot_target)) > 2:
+            elif self.survey_mode >= follow_bot and self.bot_target != None and self.bot_target in ct.get_nearby_units() and self.pos.distance_squared(ct.get_position(self.bot_target)) > 2:
                 #continue
                 self.survey_mode = follow_bot
                 continue
 
-            # This enemy turret is not being fed by anything and just needs to be destroyed. This looks for surrounding tiles to place a defensive gunner.
-                # Maybe this should also check if the tile has Titanium or refined axionite to feed it?
-            #if self.survey_mode < destroy_turret:
-            #    break
-
-            # Check if conveyor route home needs rebuilding
-            '''if self.survey_mode >= reconnect_conveyors and self.built_harvester[1] == None and i_building in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR] and ct.is_in_vision(i) and self.map[i.add(i_direction).y][i.add(i_direction).x][1] not in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE, EntityType.SENTINEL, EntityType.GUNNER]:
-                if (ct.get_tile_builder_bot_id(i) is None and not (ct.is_in_vision(i.add(i_direction)) and ct.get_tile_builder_bot_id(i.add(i_direction)) is None) and ct.get_stored_resource(ct.get_tile_building_id(i)) is not None) or self.pos == i:
-                    if self.pos.distance_squared(i) < self.target.distance_squared(self.pos) or self.target == self.core_pos:
-                        self.target = i
-                        self.survey_mode = reconnect_conveyors'''
-
-            # Check if there are unmined ores nearby
-            #elif i.distance_squared(self.core_pos) < ((len(self.map[0])/2)**2 + (len(self.map)/2)**2) and i_building in [None, EntityType.ROAD, EntityType.MARKER] and self.map[i.y][i.x][0] in [Environment.ORE_TITANIUM, Environment.ORE_AXIONITE]  and self.survey_mode >= reconnect_conveyors:
-            #    reject = False
-            #    for s in STRAIGHTS:
-            #        if self.is_on_map(i.add(s)) and (self.map[i.add(s).y][i.add(s).x][1] in [EntityType.GUNNER, EntityType.SENTINEL, EntityType.BREACH]) and self.map[i.add(s).y][i.add(s).x][2] != self.team:
-            #            reject = True
-            #    if i not in self.unreachable_tiles and not reject:
-            #        if self.pos.distance_squared(i) < self.target.distance_squared(self.pos) or self.target == self.core_pos:
-            #            self.target = i
-            #            self.survey_mode = reconnect_conveyors
-
             #Check for unconnected harvesters
-            #SHOULD BE ELIF
-            if self.survey_mode >= reconnect_conveyors and self.built_harvester[1] == None and i_building in [EntityType.HARVESTER] and self.map[i.y][i.x][0] in [Environment.ORE_TITANIUM, Environment.ORE_AXIONITE]  and self.survey_mode >= reconnect_conveyors:
+            if self.survey_mode >= reconnect_conveyors and i_building == EntityType.HARVESTER and self.map[i.y][i.x][0] in [Environment.ORE_TITANIUM, Environment.ORE_AXIONITE]:
                 reject = False
                 for s in STRAIGHTS:
                     if self.is_on_map(i.add(s)) and self.map[i.add(s).y][i.add(s).x][0] != Environment.WALL and (self.map[i.add(s).y][i.add(s).x][1] in [EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER] or self.map[i.add(s).y][i.add(s).x][4] != None):
@@ -2869,14 +2826,15 @@ class Player:
                         self.target = i
                         self.survey_mode = reconnect_conveyors
 
-        print(ct.get_cpu_time_elapsed())
+        print(f"Time:{ct.get_cpu_time_elapsed()-start_time}")
+
         if self.pos.distance_squared(self.target) > 2 and self.survey_mode != 10 and self.survey_mode != follow_bot: # and self.defence_mode >= 3:
             print(f"Survey mode: {self.survey_mode}, target: ({self.target.x}, {self.target.y})")
             self.explore(ct)
+            self.survey_mode = 10
             return
 
         if self.survey_mode == destroy_turret_food:
-            
             print(f"Survey_mode 1, ({self.target.x},{self.target.y}) ({self.survey_target.x},{self.survey_target.y})")
             map_tile = self.map[self.target.y][self.target.x]
             if map_tile[1] not in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE, EntityType.HARVESTER, EntityType.ROAD, EntityType.BARRIER, None]:
@@ -2905,11 +2863,10 @@ class Player:
                     self.survey_mode = 10
             else:
                 print("WTF")
-
+                self.survey_mode = 10
                 if self.pos.distance_squared(self.target) >= 4:
                     self.explore(ct)
-                    self.survey_mode = 10
-                # ct.resign()
+                    ct.resign()
             return
         
         elif self.survey_mode == heal:
@@ -3132,6 +3089,7 @@ class Player:
                     self.explore(ct)
                     self.target = Position(1000, 1000)
 
+
     def should_mine(self):
         if len(self.ore_survey) >= 2:
             self.ore_target = None
@@ -3313,18 +3271,18 @@ class Player:
     def gn_init(self,ct):
         self.update_map(ct)
         vision_tiles = ct.get_nearby_tiles()
+        self.pos = ct.get_position()
+        self.team = ct.get_team()
         for i in vision_tiles:
             if ct.get_tile_building_id(i) is not None and ct.get_entity_type(ct.get_tile_building_id(i)) == EntityType.CORE:
                 if ct.get_team(ct.get_tile_building_id(i)) != ct.get_team():
+                    self.enemy_core_pos = ct.get_position(ct.get_tile_building_id(i))
                     self.status = ATTACK_ENEMY_CORE
                 else:
+                    self.core_pos = ct.get_position(ct.get_tile_building_id(i))
                     self.status = DEFENCE
-                    self.defence_mode = 10
                 print(self.status)
                 return
-        self.status = DEFENCE
-        self.defence_mode = 10
-        print("Defence")
 
     def gn_attack_enemy_core(self, ct):
         d = ct.get_direction()
@@ -3349,37 +3307,55 @@ class Player:
 
     def gn_defend_core(self, ct):
         d = ct.get_direction()
-
+        ammo = ct.get_ammo_amount()
         done = True
+        feed = Direction.CENTRE
+
         for i in STRAIGHTS:
-            target = ct.get_position()
-            target = target.add(i)
-            if not(self.is_on_map(target)):
+            if ammo != 0:
                 break
+            target = self.pos.add(i)
+            if not(self.is_on_map(target)):
+                continue
 
             # Check if being fed by a splitter
             fed_by_conv = ct.get_entity_type(ct.get_tile_building_id(target)) in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR] and ct.get_direction(ct.get_tile_building_id(target)) == i.opposite()
             fed_by_splitter_harvester = ct.get_entity_type(ct.get_tile_building_id(target)) in [EntityType.SPLITTER] and ct.get_direction(ct.get_tile_building_id(target)) != i
             fed_by_harv_foun = ct.get_entity_type(ct.get_tile_building_id(target)) in [EntityType.HARVESTER, EntityType.FOUNDRY]
-            fed_by_bridge = len(self.map[ct.get_position().y][ct.get_position().x][3]) > 1
 
-            if fed_by_conv or fed_by_splitter_harvester or fed_by_harv_foun or fed_by_bridge:
+            if fed_by_conv or fed_by_splitter_harvester or fed_by_harv_foun:
+                feed = i
                 target = ct.get_position()
                 for j in [target.add(d) for d in DIRECTIONS] + [target.add(d).add(d) for d in DIRECTIONS]:
                     print(j)
                     if not(self.is_on_map(j)):
-                        break
+                        continue
                     if (ct.get_team(ct.get_tile_building_id(j)) not in [ct.get_team(), None] and ct.get_entity_type(ct.get_tile_building_id(j)) not in [EntityType.ROAD, EntityType.MARKER, None]) or (ct.get_entity_type(ct.get_tile_builder_bot_id(j)) == EntityType.BUILDER_BOT and ct.get_team() != ct.get_team(ct.get_tile_builder_bot_id(j))):
                         done = False
 
-        if done:
-            print("Wanting to self-destruct")
+        if len(self.map[self.pos.y][self.pos.x][3]) > 1:
+            done = False
+
+        if done is True and ammo == 0 and self.status not in [DEFENCE, ATTACK_ENEMY_CORE ]:
             ct.self_destruct()
 
-        target = ct.get_position()
-        for i in range(2):
+        if d in STRAIGHTS and ct.get_entity_type(ct.get_tile_building_id(self.pos.add(d).add(d).add(d))) == EntityType.CORE and ct.get_team(ct.get_tile_building_id(self.pos.add(d).add(d).add(d))) != self.team and ct.can_fire(self.pos.add(d).add(d).add(d)):
+            ct.fire(self.pos.add(d).add(d).add(d))
+            return
+
+        if ct.get_entity_type(ct.get_tile_building_id(self.pos.add(d).add(d))) == EntityType.CORE and ct.get_team(ct.get_tile_building_id(self.pos.add(d).add(d))) != self.team and ct.can_fire(self.pos.add(d).add(d)):
+            ct.fire(self.pos.add(d).add(d))
+            return
+
+        if ammo == 0 and d == feed.opposite():
+            if ct.can_rotate(d.rotate_right()):  # and ct.get_global_resources()[0] > 50:
+                ct.rotate(d.rotate_right())
+                return
+
+        target = self.pos
+        for i in range(3):
             target = target.add(d)
-            if not(0 <= target.x < ct.get_map_width() and 0 <= target.y < ct.get_map_height()):
+            if not( self.is_on_map(target)):
                 break
             if (ct.get_entity_type(ct.get_tile_builder_bot_id(target)) == EntityType.BUILDER_BOT and ct.get_team() != ct.get_team(ct.get_tile_builder_bot_id(target))) or (ct.get_team(ct.get_tile_building_id(target)) not in [None, ct.get_team()] and ct.get_entity_type(ct.get_tile_building_id(target)) not in [EntityType.ROAD, EntityType.MARKER]) or ct.get_entity_type(ct.get_tile_building_id(target)) == EntityType.ROAD:
                 if ct.can_fire(target):
@@ -3390,7 +3366,7 @@ class Player:
 
         target = ct.get_position()
         # If no builder bot found, look for one:
-        for i in [target.add(d) for d in DIRECTIONS] + [target.add(d).add(d) for d in DIRECTIONS]:
+        for i in [target.add(d) for d in DIRECTIONS] + [target.add(d).add(d) for d in DIRECTIONS] + [target.add(s).add(s).add(s) for s in STRAIGHTS]:
             if i.x < 0 or i.x >= ct.get_map_width() or i.y<0 or i.y >= ct.get_map_height():
                 continue
             if (ct.get_entity_type(ct.get_tile_builder_bot_id(i)) == EntityType.BUILDER_BOT and ct.get_team() != ct.get_team(ct.get_tile_builder_bot_id(i))) or (ct.get_team(ct.get_tile_building_id(i)) != ct.get_team() and ct.get_entity_type(ct.get_tile_building_id(i)) not in [EntityType.ROAD, EntityType.MARKER]):
@@ -3740,8 +3716,8 @@ class Player:
         etype = ct.get_entity_type()
 
         if etype == EntityType.CORE:
-            #if ct.get_current_round() > 300:
-            #    ct.resign()
+            if ct.get_current_round() > 600:
+                ct.resign()
 
             if self.team == None:
                 self.team = ct.get_team()
@@ -4191,10 +4167,7 @@ class Player:
         elif etype == EntityType.GUNNER:
             if self.status == INIT:
                 self.gn_init(ct)
-            elif self.status == ATTACK_ENEMY_CORE:
-                print("ATTACK")
-                self.gn_attack_enemy_core(ct)
-            elif self.status == DEFENCE:
+            elif self.status == ATTACK_ENEMY_CORE or self.status == DEFENCE:
                 print("DEFENCE")
                 self.gn_defend_core(ct)
 
@@ -4298,3 +4271,8 @@ class Player:
                         if ct.can_launch(i,target):
                             ct.launch(i,target)
                             return
+                    for a in ct.get_nearby_tiles():
+                        if ct.can_launch(i,a):
+                            ct.launch(i,a)
+                            return
+                    return
