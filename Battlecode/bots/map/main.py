@@ -4,6 +4,8 @@ from collections import deque
 from cambc import Controller, Direction, EntityType, Environment, Position, ResourceType
 import heapq
 
+from rich.layout import Splitter
+
 # non-centre directions
 DIRECTIONS = [d for d in Direction if d != Direction.CENTRE]
 STRAIGHTS = [Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST]
@@ -25,8 +27,13 @@ MOVING_TURRET = 8
 ATTACK_ENEMY_CONVEYORS = 9
 SURVEY_SUPPLY_LINES = 10
 
+GUNNER_ATTACK_CORE_DISTII = [4,5,9,10,16,17, 8,13,18]
+SENTINEL_ATTACK_CORE_DISTII = [i for i in range(42)] + [50]
+
 class Player:
     def __init__(self):
+        self.attack_turret = None
+        self.attack_mode = 10
         self.id = None
         self.team = None
         self.pos = None
@@ -3440,6 +3447,160 @@ class Player:
         self.target = self.explore_corners[self.corner_index]
         self.explore(ct)
 
+    def is_tile_buildable(self, tile):
+        return (self.map[tile.y][tile.x][1] in [None, EntityType.MARKER] or (self.map[tile.y][tile.x][1] in [EntityType.BARRIER, EntityType.ROAD] and self.map[tile.y][tile.x][2] == self.team)) and self.map[tile.y][tile.x][0] != Environment.WALL
+
+    def attack(self, ct):
+        '''
+        Order of importance (numbers refer to self.defence_mode):
+         - 1 If there is an enemy turret, we need to destroy conveyor to it
+         - 2 Put gunner down to destroy the enemy turret mentioned above
+         - 3 If buildings' health is low, heal!
+         - 4 Reconnect broken conveyor paths
+         - 5 If can build sentinel next to a splitter/foundry
+         - 6 Upgrade conveyors
+         - 7 Destroy roads and barriers next to core
+         - 10 Unassigned/Default
+
+        Reorder by changing the numbers below (untested):
+         Note: putting destroy turret lower than reconnect conveyors does NOT work
+        '''
+        self.enemy_core_pos = Position(10,1)
+        place_turret = 1
+        idk_what_to_call_this_equal_2 = 2
+
+        if self.enemy_core_pos.distance_squared(self.pos) > 52:
+            self.target = self.enemy_core_pos
+            self.explore(ct)
+            return
+
+        global_tit, global_ax = ct.get_global_resources()
+        can_afford_harvester, can_afford_sentinel, can_afford_foundry, can_afford_gunner, can_afford_breach = (ct.get_harvester_cost()[0] < global_tit), (ct.get_sentinel_cost()[0] < global_tit), (ct.get_foundry_cost()[0] < global_tit), (ct.get_gunner_cost()[0] < global_tit), (ct.get_breach_cost()[0] < global_tit)
+
+        if self.attack_mode == 10:
+            self.target = Position(1000,1000)
+
+        vision_tiles = self.centre_vision(self.pos, 20)
+        for i in vision_tiles:
+            i_building, i_direction, i_team = self.map[i[1]][i[0]][1], self.map[i[1]][i[0]][3][0], self.map[i[1]][i[0]][2]
+            pos = Position(i[0], i[1])
+            #i_id = ct.get_tile_building_id(pos)
+
+            # Build turrets next to Foundry or (Tit) Harvester
+            if self.attack_mode >= place_turret and (i_building == EntityType.FOUNDRY or (i_building == EntityType.HARVESTER and self.map[i[1]][i[0]][0] == Environment.ORE_TITANIUM)):
+                for s in STRAIGHTS:
+                    if self.is_on_map(pos.add(s)) and self.is_tile_buildable(pos.add(s)) and (self.pos.distance_squared(self.target) > self.pos.distance_squared(pos.add(s)) or self.attack_mode > place_turret):
+                        if i_building == EntityType.FOUNDRY and can_afford_breach:
+                            self.attack_mode = place_turret
+                            self.attack_turret = EntityType.BREACH
+                            self.target = pos.add(s)
+                            print("A0", i, s ,pos)
+                        elif pos.add(s).distance_squared(self.enemy_core_pos) in GUNNER_ATTACK_CORE_DISTII and can_afford_gunner:
+                            self.attack_mode = place_turret
+                            self.attack_turret = EntityType.GUNNER
+                            self.target = pos.add(s)
+                            print("A1", i, s ,pos)
+                        elif pos.add(s).distance_squared(self.enemy_core_pos) in SENTINEL_ATTACK_CORE_DISTII and can_afford_sentinel:
+                            self.attack_mode = place_turret
+                            self.attack_turret = EntityType.SENTINEL
+                            self.target = pos.add(s)
+                            print("A2", i, s ,pos)
+
+            # Build turrets after conveyors
+            elif self.attack_mode >= place_turret and i_building in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR] and self.is_on_map(pos.add(i_direction)) and self.is_tile_buildable(pos.add(i_direction)) and (self.pos.distance_squared(self.target) > self.pos.distance_squared(pos.add(i_direction)) or self.attack_mode > place_turret):
+                if pos.add(i_direction).distance_squared(self.enemy_core_pos) in GUNNER_ATTACK_CORE_DISTII and can_afford_gunner:
+                    self.attack_mode = place_turret
+                    self.attack_turret = EntityType.GUNNER
+                    self.target = pos.add(i_direction)
+                    print("BB1", i)
+                elif pos.add(i_direction).distance_squared(self.enemy_core_pos) in SENTINEL_ATTACK_CORE_DISTII and can_afford_sentinel:
+                    self.attack_mode = place_turret
+                    self.attack_turret = EntityType.SENTINEL
+                    self.target = pos.add(i_direction)
+                    print("BB2", i)
+
+            # Build turrets after splitters
+            elif self.attack_mode >= place_turret and i_building == EntityType.SPLITTER:
+                for d in [a for a in STRAIGHTS if (a != i_direction.opposite())]:
+                    if self.is_on_map(pos.add(d)) and self.is_tile_buildable(pos.add(d)) and (self.pos.distance_squared(self.target) > self.pos.distance_squared(pos.add(d)) or self.attack_mode > place_turret):
+                        if pos.add(d).distance_squared(self.enemy_core_pos) in GUNNER_ATTACK_CORE_DISTII and can_afford_gunner:
+                            self.attack_mode = place_turret
+                            self.attack_turret = EntityType.GUNNER
+                            self.target = pos.add(d)
+                            print("CCC1", i)
+                        elif pos.add(d).distance_squared(self.enemy_core_pos) in SENTINEL_ATTACK_CORE_DISTII and can_afford_sentinel:
+                            self.attack_mode = place_turret
+                            self.attack_turret = EntityType.SENTINEL
+                            self.target = pos.add(d)
+                            print("CCC2", i)
+
+            # Build turrets from bridge endings
+            elif self.attack_mode >= place_turret and len(self.map[i[1]][i[0]][3])>1 and (self.pos.distance_squared(self.target) > self.pos.distance_squared(pos) or self.attack_mode > place_turret) and self.is_tile_buildable(pos):
+                if pos.distance_squared(self.enemy_core_pos) in GUNNER_ATTACK_CORE_DISTII and can_afford_gunner:
+                    self.attack_mode = place_turret
+                    self.attack_turret = EntityType.GUNNER
+                    self.target = pos
+                    print("DDDD1", i)
+                elif pos.distance_squared(self.enemy_core_pos) in SENTINEL_ATTACK_CORE_DISTII and can_afford_sentinel:
+                    self.attack_mode = place_turret
+                    self.attack_turret = EntityType.SENTINEL
+                    self.target = pos
+                    print("DDDD2", i)
+
+            # Find Conveyor leading to enemy buildings
+            elif self.attack_mode >= idk_what_to_call_this_equal_2 and i_building in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.BRIDGE, Splitter] and (self.pos.distance_squared(self.target) > self.pos.distance_squared(pos) or self.attack_mode > idk_what_to_call_this_equal_2):
+                end_entity, end_team, end_pos = self.simple_supply_connectivity(ct, pos)
+                if end_entity is not None and end_team != self.team:
+                    self.target = pos
+                    self.attack_mode = idk_what_to_call_this_equal_2
+
+        print(f"Attack mode: {self.attack_mode}, target: ({self.target.x}, {self.target.y}), {self.attack_turret}")
+        if self.pos.distance_squared(self.target) > 2 and self.attack_mode != 10:
+            self.explore(ct)
+            if ct.get_hp() < ct.get_max_hp() and ct.can_heal(self.pos):
+                ct.heal(self.pos)
+
+        elif self.attack_mode == place_turret:
+            move = False
+            if self.pos == self.target:
+                for d in DIRECTIONS:
+                    if ct.can_move(d):
+                        ct.move(d)
+                        move = True
+                        break
+                if not move:
+                    ct.self_destruct()
+
+            core_direction = self.target.direction_to(self.enemy_core_pos)
+            if ct.can_destroy(self.target):
+                ct.destroy(self.target)
+
+            if self.attack_turret == EntityType.BREACH and ct.can_build_breach(self.target, core_direction):
+                ct.build_breach(self.target, core_direction)
+            elif self.attack_turret == EntityType.GUNNER and ct.can_build_gunner(self.target, core_direction):
+                ct.build_gunner(self.target, core_direction)
+            elif self.attack_turret == EntityType.SENTINEL and ct.can_build_sentinel(self.target, core_direction):
+                ct.build_sentinel(self.target, core_direction)
+            else:
+                print("Could not build turret. IDK WHY.")
+
+            self.attack_mode = 10
+            return
+
+        elif self.attack_mode == idk_what_to_call_this_equal_2:
+            if ct.can_destroy(self.target):
+                ct.destroy(self.target)
+            elif self.pos != self.target and ct.can_move(self.pos.direction_to(self.target)):
+                ct.move(self.pos.direction_to(self.target))
+            if ct.can_fire(self.target):
+                ct.fire(self.target)
+            self.attack_mode = 10
+            return
+
+        else:
+            self.explore_corners = None
+            self.exploring_the_map(ct, self.enemy_core_pos)
+
 
 
     '''def exploring_the_map(self, ct, centre=None, start=None):
@@ -3846,7 +4007,9 @@ class Player:
                 self.defence(ct)
 
             elif self.status == ATTACK_ENEMY_CORE:
-                print("Attacking Enemy Core")
+                print("Attack")
+                self.attack(ct)
+                '''print("Attacking Enemy Core")
                 if self.enemy_core_pos == Position(1000, 1000):
                     if len(self.possible_core_locations) != 0:
                         self.target = Position(1000, 1000)
@@ -3871,7 +4034,7 @@ class Player:
                         self.target = self.enemy_core_pos
                         self.explore(ct)
                         return
-                    self.attack_enemy_core(ct)
+                    self.attack_enemy_core(ct)'''
 
             elif self.status == ATTACK_ENEMY_SUPPLY_LINES:
                 if self.enemy_core_pos == Position(1000, 1000):
