@@ -4228,7 +4228,7 @@ class Player:
 
             for i in ct.get_nearby_tiles(5):
                 map_tile = self.map[i.y][i.x]
-                if map_tile[4] == EntityType.BUILDER_BOT:
+                if map_tile[4] == EntityType.BUILDER_BOT and ct.get_team(ct.get_tile_builder_bot_id(i)) != self.team:
                     direction = self.pos.direction_to(i)
                     print(i,direction)
                     targets = [self.pos.add(direction).add(direction).add(direction).add(direction).add(d) for d in [Direction.CENTRE] + DIRECTIONS]
