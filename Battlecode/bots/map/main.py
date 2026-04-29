@@ -3885,7 +3885,7 @@ class Player:
                         break
 
             # Moving turret bots
-            elif ct.get_current_round() > 25 and ct.get_global_resources()[0] > 300 and self.num_spawned < 17:
+            elif ct.get_current_round() > 25 and self.num_spawned < 17:
                 if ct.get_global_resources()[0] < ct.get_builder_bot_cost()[0]:
                     print("Waiting for resources to spawn builder bot")
                     return
