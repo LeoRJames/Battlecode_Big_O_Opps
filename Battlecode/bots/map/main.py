@@ -3573,7 +3573,7 @@ class Player:
         Reorder by changing the numbers below (untested):
          Note: putting destroy turret lower than reconnect conveyors does NOT work
         '''
-        self.enemy_core_pos = Position(10,1)
+        self.enemy_core_pos = Position(1000, 1000)
         place_turret = 1
         idk_what_to_call_this_equal_2 = 2
 
@@ -4126,8 +4126,6 @@ class Player:
 
             elif self.status == ATTACK_ENEMY_CORE:
                 print("Attack")
-                self.attack(ct)
-                '''print("Attacking Enemy Core")
                 if self.enemy_core_pos == Position(1000, 1000):
                     if len(self.possible_core_locations) != 0:
                         self.target = Position(1000, 1000)
@@ -4148,11 +4146,7 @@ class Player:
                                                         [self.core_pos.x, ct.get_map_height() - 1 - self.core_pos.y],  # Vertical Flip
                                                         [ct.get_map_width() - 1 - self.core_pos.x, ct.get_map_height() - 1 - self.core_pos.y]]  # Rotation
                 else:
-                    if self.enemy_core_pos.distance_squared(self.pos) > 50:
-                        self.target = self.enemy_core_pos
-                        self.explore(ct)
-                        return
-                    self.attack_enemy_core(ct)'''
+                    self.attack(ct)
 
             elif self.status == ATTACK_ENEMY_SUPPLY_LINES:
                 if self.enemy_core_pos == Position(1000, 1000):
