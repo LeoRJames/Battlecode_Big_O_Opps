@@ -3031,7 +3031,7 @@ class Player:
                 self.status = self.prev_status
                 self.prev_status = None
             else:
-                if self.ore_target == None and not (self.map[0][0][0] != 0 and self.map[-1][0][0] != 0 and self.map[0][-1][0] != 0 and self.map[-1][-1][0] != 0) and ((len(self.tit_survey) < 2 and len(self.tit) == 0 and not (len(self.ax) != 0 and ct.get_current_round() > 50)) or (len(self.ax_survey) < 1 and len(self.ax) == 0 and ct.get_current_round() > 50) or (len(self.ore_survey) < 4 and ((len(self.tit) == 0 and len(self.tit_survey) < 2) or (len(self.ax) == 0 and len(self.ax_survey) < 1)))):
+                if self.ore_target == None and not (self.map[0][0][0] != 0 and self.map[-1][0][0] != 0 and self.map[0][-1][0] != 0 and self.map[-1][-1][0] != 0) and len(self.ore_survey) < 2 and ((len(self.tit_survey) < 2 and len(self.tit) == 0 and not (len(self.ax) != 0 and ct.get_current_round() > 50)) or (len(self.ax_survey) < 1 and len(self.ax) == 0 and ct.get_current_round() > 50)):
                     print("explore map", self.tit_survey, self.ax_survey)
                     self.exploring_the_map(ct)
                     #self.target = Position(1000, 1000)
@@ -3086,7 +3086,7 @@ class Player:
                     self.target = Position(1000, 1000)
 
     def should_mine(self):
-        if len(self.ore_survey) >= 4:
+        if len(self.ore_survey) >= 2:
             self.ore_target = None
             return False
 
@@ -3780,7 +3780,6 @@ class Player:
                             if ct.can_place_marker(i) and ct.is_tile_empty(i):
                                 ct.place_marker(i, message)
                         break
-                pass
 
             # Bots to do healing
             elif ct.get_hp() < 500 or self.num_spawned < 4 or (self.num_spawned < 5 and ct.get_global_resources()[0] >= 500) or (ct.get_current_round() > 1000 and self.healing_spawned < 5):
@@ -3795,7 +3794,7 @@ class Player:
                         break
 
             # Bots to attack supply lines
-            elif ct.get_current_round() > 25 and ct.get_global_resources()[0] > 300 and (9 <= self.num_spawned < 13 or ((20 <= self.num_spawned <= 30 or ct.get_unit_count() <= 40) and self.num_spawned % 2 == 0 and ct.get_global_resources()[0] > 1500)):
+            elif ct.get_current_round() > 25  and (9 <= self.num_spawned < 13 or ((20 <= self.num_spawned <= 30 or ct.get_unit_count() <= 40) and self.num_spawned % 2 == 0 and ct.get_global_resources()[0] > 1500)):
                 if ct.get_global_resources()[0] < ct.get_builder_bot_cost()[0]:
                     print("Waiting for resources to spawn builder bot")
                     return
@@ -3826,7 +3825,7 @@ class Player:
                         break
 
             # Extra bots to attack enemy core
-            elif ct.get_current_round() > 25 and ct.get_global_resources()[0] > 300 and (self.num_spawned < 13 or (17 <= self.num_spawned <= 20 and ct.get_global_resources()[0] > 1000) or ((20 <= self.num_spawned <= 30 or ct.get_unit_count() <= 40) and self.num_spawned % 2 == 1 and ct.get_global_resources()[0] > 1500)):
+            elif ct.get_current_round() > 25 and (self.num_spawned < 13 or (17 <= self.num_spawned <= 20 and ct.get_global_resources()[0] > 1000) or ((20 <= self.num_spawned <= 30 or ct.get_unit_count() <= 40) and self.num_spawned % 2 == 1 and ct.get_global_resources()[0] > 1500)):
                 if ct.get_global_resources()[0] < ct.get_builder_bot_cost()[0]:
                     print("Waiting for resources to spawn builder bot")
                     return
