@@ -1074,3 +1074,204 @@ def harvest_ore(self, ct, ore):
                 self.try_avoid = True
 
             # Check if path exists to core
+
+def attack_enemy_supply_lines(self, ct):
+        if self.enemy_core_pos == Position(1000, 1000): # Do not really need this
+            self.target = Position(1000, 1000)
+            self.status = SURVEY_SUPPLY_LINES
+            self.explore_start = None
+            return
+        if (self.target == Position(1000, 1000) or self.target == self.enemy_core_pos) and len(self.enemy_mined_tit) != 0:
+            self.target = self.enemy_mined_tit[0]
+            self.enemy_mined_tit_target = self.enemy_mined_tit[0]
+        elif self.target == self.enemy_core_pos and self.enemy_core_pos.distance_squared(self.pos) > 20:
+            self.explore(ct)
+            return
+        elif len(self.enemy_mined_tit) == 0:
+            self.enemy_mined_tit_target = None
+            self.explore_start = self.enemy_core_pos
+            self.exploring_the_map(ct, self.enemy_core_pos)
+            return
+        elif self.enemy_mined_tit_target == None:   # Robust check
+            if len(self.enemy_mined_tit) != 0:
+                self.target = self.enemy_mined_tit[0]
+                self.enemy_mined_tit_target = self.enemy_mined_tit[0]
+            else:
+                self.explore_start = self.enemy_core_pos
+                self.exploring_the_map(ct, self.enemy_core_pos)
+                return
+        if self.target.distance_squared(self.pos) > 8:
+            self.explore(ct)
+        print(self.target)
+        target_tile = None
+        if self.target in self.enemy_mined_tit:
+            checks = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+            for check in checks:
+                # If a clear space or own building that can be removed then just go for it
+                dx = self.target.x + check[0]
+                dy = self.target.y + check[1]
+                pos = Position(dx, dy)
+                if not (dx >= 0 and dx < len(self.map[0]) and dy >= 0 and dy < len(self.map) and pos not in self.unreachable_tiles and self.map[dy][dx][0] != Environment.WALL and self.map[dy][dx][0] != 0):
+                    continue
+                tile = self.map[dy][dx]
+                if tile[1] == None or (tile[2] == ct.get_team() and tile[1] in [EntityType.BARRIER, EntityType.ROAD]):
+                    target_tile = pos
+                    break
+                # If an enemy supply line or road it can be used but continue checking for better tiles
+                elif tile[1] in [EntityType.BRIDGE, EntityType.CONVEYOR, EntityType.ROAD, EntityType.SPLITTER] and tile[2] != ct.get_team():
+                    target_tile = pos
+                elif tile[2] == ct.get_team() and tile[1] in [EntityType.SENTINEL, EntityType.GUNNER, EntityType.BREACH]:
+                    self.enemy_mined_tit.remove(self.enemy_mined_tit_target)
+                    self.attacked_enemy_mined_tit.append(self.enemy_mined_tit_target)
+                    self.enemy_mined_tit_target = None
+                    self.target = self.enemy_core_pos
+                    if len(self.enemy_mined_tit) == 0:
+                        self.target = Position(1000, 1000)
+                        self.status = SURVEY_SUPPLY_LINES
+                        self.explore_start = None
+                    return
+        if target_tile != None:
+            self.target = target_tile
+        print(self.target)
+        if self.target in self.enemy_mined_tit:
+            # Algorithm to build own supply line and connect turret to start destroying supply line
+            self.enemy_mined_tit.remove(self.enemy_mined_tit_target)
+            self.attacked_enemy_mined_tit.append(self.enemy_mined_tit_target)
+            self.enemy_mined_tit_target = None
+            self.target = self.enemy_core_pos
+            if len(self.enemy_mined_tit) == 0:
+                self.target = Position(1000, 1000)
+                self.status = SURVEY_SUPPLY_LINES
+                self.explore_start = None
+            return
+        else:
+            if 0 < self.pos.distance_squared(self.target) <= 2 and (self.map[self.target.y][self.target.x][1] == None or (self.map[self.target.y][self.target.x][2] == self.team and self.map[self.target.y][self.target.x][1] in [EntityType.ROAD, EntityType.BARRIER]) ):
+                if ct.can_destroy(self.target):
+                    ct.destroy(self.target)
+                print("Want to build sentinel", self.target)
+                if ct.can_build_sentinel(self.target, self.target.direction_to(self.enemy_core_pos)): # Should check money first
+                    ct.build_sentinel(self.target, self.target.direction_to(self.enemy_core_pos))
+                    self.enemy_mined_tit.remove(self.enemy_mined_tit_target)
+                    self.attacked_enemy_mined_tit.append(self.enemy_mined_tit_target)
+                    self.enemy_mined_tit_target = None
+                    self.target = self.enemy_core_pos
+                    if len(self.enemy_mined_tit) == 0:
+                        self.target = Position(1000, 1000)
+                        self.status = SURVEY_SUPPLY_LINES
+                        self.explore_start = None
+                    return
+            elif self.pos == self.target:
+                if self.map[self.target.y][self.target.x][1] == None:   # Move out of way and build sentinel
+                    for d in DIRECTIONS:
+                        if ct.can_build_road(self.pos.add(d)):
+                            ct.build_road(self.pos.add(d))
+                        if ct.can_move(d):
+                            ct.move(d)
+                            break
+                    if ct.can_build_sentinel(self.target, self.target.direction_to(self.enemy_core_pos)): # Should check money first
+                        ct.build_sentinel(self.target, self.target.direction_to(self.enemy_core_pos))
+                        self.enemy_mined_tit.remove(self.enemy_mined_tit_target)
+                        self.attacked_enemy_mined_tit.append(self.enemy_mined_tit_target)
+                        self.enemy_mined_tit_target = None
+                        self.target = self.enemy_core_pos
+                        if len(self.enemy_mined_tit) == 0:
+                            self.target = Position(1000, 1000)
+                            self.status = SURVEY_SUPPLY_LINES
+                            self.explore_start = None
+                        return
+                elif ct.can_fire(self.target):
+                    ct.fire(self.target)
+            elif 0 < self.pos.distance_squared(self.target) <= 20 and self.map[self.target.y][self.target.x][2] == self.team and self.map[self.target.y][self.target.x][1] in [EntityType.SENTINEL, EntityType.GUNNER, EntityType.BREACH]:
+                self.enemy_mined_tit.remove(self.enemy_mined_tit_target)
+                self.attacked_enemy_mined_tit.append(self.enemy_mined_tit_target)
+                self.enemy_mined_tit_target = None
+                self.target = self.enemy_core_pos
+                if len(self.enemy_mined_tit) == 0:
+                    self.target = Position(1000, 1000)
+                    self.status = SURVEY_SUPPLY_LINES
+                    self.explore_start = None
+                return
+            # Non-passable enemy tile built on target tile or own building that do not want to destroy
+            elif 0 < self.pos.distance_squared(self.target) <= 20 and ((self.map[self.target.y][self.target.x][2] != self.team and self.map[self.target.y][self.target.x][1] not in [EntityType.ROAD, EntityType.CONVEYOR, EntityType.SPLITTER, EntityType.BRIDGE]) or (self.map[self.target.y][self.target.x][2] in [self.team, None] and self.map[self.target.y][self.target.x][1] not in [EntityType.BARRIER, EntityType.MARKER, EntityType.ROAD, None])):
+                self.target = self.enemy_mined_tit_target
+            elif (self.pos != self.target and self.map[self.target.y][self.target.x][2] != ct.get_team()) or (self.pos.distance_squared(self.target) > 2 and (self.map[self.target.y][self.target.x][2] == self.team or self.map[self.target.y][self.target.x][1] == None)):
+                self.explore(ct)
+
+def exploring_the_map(self, ct, centre=None, start=None):
+        if centre == None:
+            centre = Position(len(self.map[0])//2, len(self.map)//2)
+        if start == None:
+            if self.explore_start == None:
+                start = centre # Start at centre of map
+            else:
+                start = self.explore_start
+        if self.target != Position(1000, 1000) and self.pos.distance_squared(self.target) > 20:
+            if self.target in self.unreachable_tiles:
+                count, x1, x2, y1, y2, radii = self.find_corners(centre, radii = self.ceil(self.target, centre) + 1)
+                self.target = Position(x1, y1)
+            print(self.target)
+            self.explore(ct)
+        elif self.target == Position(1000, 1000):
+            if self.target in self.unreachable_tiles:
+                count, x1, x2, y1, y2, radii = self.find_corners(centre, radii = self.ceil(self.target, centre) + 1)
+                self.target = Position(x1, y1)
+            else:
+                self.target = Position(start.x, start.y)
+            self.explore_start = self.target
+            print(self.target)
+            self.explore(ct)
+        else:
+            count, x1, x2, y1, y2, radii = self.find_corners(centre)
+            print(centre, start, x1, x2, y1, y2, self.target, radii)
+            if count == 4 and (self.target.x, self.target.y) == (x1, y2):
+                self.target = Position(1000, 1000)
+                self.explore_start = None
+                if self.enemy_core_pos == Position(1000, 1000):
+                    self.status = DEFENCE
+                    self.defence_mode = 10
+                else:
+                    self.status = ATTACK_ENEMY_CORE
+                return
+            CORNERS = [(x1, y1), (x2, y1), (x2, y2), (x1, y2)]
+            if CORNERS[3] == (self.target.x, self.target.y):
+                radii += 1
+                x1 = centre.x-radii*7
+                if x1 < 0:
+                    x1 = 0
+                y1 = centre.y-radii*7
+                if y1 < 0:
+                    y1 = 0
+                self.target = Position(x1, y1)
+                self.explore_start = self.target
+                print(self.target)
+                self.explore(ct)
+                return
+            for i in range(len(CORNERS)):
+                if CORNERS[i] == (self.target.x, self.target.y):
+                    self.target = Position(CORNERS[i+1][0], CORNERS[i+1][1])
+                    self.explore_start = self.target
+                    print(self.target)
+                    self.explore(ct)
+                    return
+                
+def find_corners(self, centre, radii=None):
+        if radii == None:
+            radii = self.ceil(self.target, centre)
+        count = 0
+        x1 = centre.x-radii*7
+        if x1 < 0:
+            x1 = 0
+            count += 1
+        y1 = centre.y-radii*7
+        if y1 < 0:
+            y1 = 0
+            count += 1
+        x2 = centre.x+radii*7
+        if x2 > len(self.map[0]) -1:
+            x2 = len(self.map[0]) -1
+            count += 1
+        y2 = centre.y+radii*7
+        if y2 > len(self.map) - 1:
+            y2 = len(self.map) - 1
+            count += 1
+        return count, x1, x2, y1, y2, radii
