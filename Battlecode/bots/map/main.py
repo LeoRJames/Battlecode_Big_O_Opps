@@ -741,7 +741,9 @@ class Player:
                     #new_cost = cost_so_far[current[3]] + tile_pos.distance_squared(current[3])  # For bridges, squared euclidean distance matters
                 #else:
                 new_cost = cost_so_far[current] + 1     # Each move costs one move cooldown whether straight or diagonal for general movement
-                if current in self.launcher_tiles:
+                if (nx,ny) in self.launcher_tiles:
+                    new_cost += 2
+                if self.map[ny][nx][1] == EntityType.BARRIER:
                     new_cost += 2
                 if (nx, ny) not in cost_so_far or new_cost < cost_so_far[(nx, ny)]:
                     cost_so_far[(nx, ny)] = new_cost
