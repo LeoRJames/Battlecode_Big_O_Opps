@@ -1097,7 +1097,7 @@ class Player:
                     return
                 elif self.map[self.built_harvester[1].y][self.built_harvester[1].x][2] != self.team and self.map[self.built_harvester[1].y][self.built_harvester[1].x][1] != EntityType.MARKER:
                     if len(self.map[self.built_harvester[1].y][self.built_harvester[1].x][3]) > 1:
-                        self.built_harvester[1] = self.map[self.built_harvester[1].y][self.built_harvester[1].x][3][0]
+                        self.built_harvester[1] = self.map[self.built_harvester[1].y][self.built_harvester[1].x][3][1]
                         self.destroy_current = True
                     elif self.map[self.pos.y][self.pos.x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR]:
                         if ct.can_destroy(self.pos):
@@ -3579,6 +3579,7 @@ class Player:
         print(f"Attack mode: {self.attack_mode}, target: ({self.target.x}, {self.target.y}), {self.attack_turret}")
         if self.pos.distance_squared(self.target) > 2 and self.attack_mode != 10:
             self.explore(ct)
+            self.attack_mode = 10
             if ct.get_hp() < ct.get_max_hp() and ct.can_heal(self.pos):
                 ct.heal(self.pos)
 
@@ -4145,7 +4146,7 @@ class Player:
                     for tiles in core_bots:
                         if self.map[tiles[1]][tiles[0]][4] != None:
                             core_bot_count += 1
-                    if core_bot_count == 0:
+                    if core_bot_count <= 3:
                         self.status = DEFENCE
                         return
                 self.survey_supply_lines(ct)
