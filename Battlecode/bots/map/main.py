@@ -3688,8 +3688,6 @@ class Player:
         etype = ct.get_entity_type()
 
         if etype == EntityType.CORE:
-            if ct.get_current_round() > 600:
-                ct.resign()
 
             if self.team == None:
                 self.team = ct.get_team()
