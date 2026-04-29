@@ -2738,7 +2738,7 @@ class Player:
 
                     for j in DIRECTIONS:
                         tile = i.add(j)
-                        if not(self.is_on_map(tile)):
+                        if not(self.is_on_map(tile)) or tile.distance_squared(self.core_pos) <= 2:
                             continue
 
                         map_tile = self.map[tile.y][tile.x]
