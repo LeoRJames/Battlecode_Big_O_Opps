@@ -3521,7 +3521,7 @@ class Player:
             elif self.attack_mode >= add_launchers and i_building in [None, EntityType.ROAD] and pos.distance_squared(self.enemy_core_pos) <= 16 and (self.pos.distance_squared(self.target) > self.pos.distance_squared(pos) or self.attack_mode > add_launchers):
                 launcher_nearby = False
                 for d in DIRECTIONS:
-                    if self.map[pos.add(d).y][pos.add(d).x][1] == EntityType.LAUNCHER:
+                    if self.is_on_map(pos.add(d)) and self.map[pos.add(d).y][pos.add(d).x][1] == EntityType.LAUNCHER:
                         launcher_nearby = True
                         break
                 if not launcher_nearby:
