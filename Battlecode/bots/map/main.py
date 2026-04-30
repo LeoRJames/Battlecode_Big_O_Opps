@@ -2695,12 +2695,7 @@ class Player:
 
         start_time = ct.get_cpu_time_elapsed()
 
-        if 25 > self.pos.distance_squared(self.core_pos) and ct.get_hp(ct.get_tile_building_id(self.core_pos)):
-            '''counter = 0
-            for i in [self.core_pos.add(j) for j in [Direction.CENTRE] + DIRECTIONS]:
-                if self.map[i.y][i.x][4] == EntityType.BUILDER_BOT:
-                    counter += 1
-            if counter < 4:'''
+        if 25 > self.pos.distance_squared(self.core_pos) and ct.get_hp(ct.get_tile_building_id(self.core_pos)) < 500:
             self.status = DEFENCE
 
         for i in vision_tiles:
