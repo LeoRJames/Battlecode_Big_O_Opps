@@ -787,12 +787,12 @@ class Player:
         self.id = ct.get_id()
 
         vision_tiles = ct.get_nearby_tiles()
-        for d in DIRECTIONS:
-            yy = self.pos.add(d).y
-            xx = self.pos.add(d).x
+        for i in vision_tiles:
+            yy = i.y
+            xx = i.x
 
-            if yy >= 0 and yy < len(self.map) and xx >= 0 and xx < len(self.map[0]) and self.map[self.pos.add(d).y][self.pos.add(d).x][1] == EntityType.CORE:
-                self.core_pos = ct.get_position(ct.get_tile_building_id(self.pos.add(d)))
+            if self.map[yy][xx][1] == EntityType.CORE:
+                self.core_pos = ct.get_position(ct.get_tile_building_id(i))
                 break
 
         for i in vision_tiles:
@@ -966,7 +966,7 @@ class Player:
                     exists = True if 0 <= check_location.x < len(self.map[0]) and 0 <= check_location.y < len(self.map) else False
                     if exists:
                         is_not_wall = True if self.map[check_location.y][check_location.x][0] != Environment.WALL else False
-                        if is_not_wall and self.map[check_location.y][check_location.x][1] == EntityType.MARKER or (self.map[check_location.y][check_location.x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.ROAD, EntityType.BRIDGE, EntityType.SPLITTER, EntityType.BARRIER, None] and self.map[check_location.y][check_location.x][2] in [self.team, None]):
+                        if is_not_wall and (self.map[check_location.y][check_location.x][1] == EntityType.MARKER or (self.map[check_location.y][check_location.x][1] in [EntityType.CONVEYOR, EntityType.ARMOURED_CONVEYOR, EntityType.ROAD, EntityType.BRIDGE, EntityType.SPLITTER, EntityType.BARRIER, None] and self.map[check_location.y][check_location.x][2] in [self.team, None])):
                             if self.built_harvester[1] == None or check_location.distance_squared(self.core_pos) <= self.built_harvester[1].distance_squared(self.core_pos):
                                 can_build_harvester = True
                                 self.built_harvester[1] = check_location
@@ -1027,6 +1027,7 @@ class Player:
                         is_not_wall = True if self.map[check_location.y][check_location.x][0] != Environment.WALL else False
                         if is_not_wall and self.map[check_location.y][check_location.x][4] == None and ((self.map[check_location.y][check_location.x][1] in [None, EntityType.ROAD] and self.map[check_location.y][check_location.x][2] in [None, self.team]) or self.map[check_location.y][check_location.x][1] == EntityType.MARKER):
                             self.target = check_location
+                            print("AAA", self.target)
 
             if ct.get_global_resources()[0] < ct.get_harvester_cost()[0] and ct.can_place_marker(ore) and not (self.map[ore.y][ore.x][1] == EntityType.MARKER and self.map[ore.y][ore.x][2] == self.team):
                 print("Bagsying ORE")
@@ -4084,12 +4085,6 @@ class Player:
                 if self.pos.distance_squared(self.core_pos) <= 13 and ct.get_current_round() > 500:
                     core_bots = self.centre_vision(self.core_pos, 2)
                     core_bot_count = 0
-                    for tiles in core_bots:
-                        if self.map[tiles[1]][tiles[0]][4] != None:
-                            core_bot_count += 1
-                    if core_bot_count <= 3:
-                        self.status = DEFENCE
-                        return
                 self.survey_supply_lines(ct)
 
             else:
